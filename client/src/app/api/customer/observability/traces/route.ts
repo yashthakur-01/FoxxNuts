@@ -84,3 +84,119 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ message: "Internal server error", success: false }, { status: 500 });
     }
 }
+
+export async function DELETE(request: NextRequest) {
+    const authHeader = request.headers.get("Authorization");
+    const { user, error: customerError } = await getCachedUser(authHeader);
+    if (customerError || !user) {
+        return NextResponse.json({ message: `Authorization error: ${customerError?.message || "Not authenticated"}`, success: false }, { status: 401 });
+    }
+
+    try {
+        const body = await request.json();
+        const { workspace_id, session_id, trace_id } = body;
+
+        if (!workspace_id || (!session_id && !trace_id)) {
+            return NextResponse.json(
+                { message: "workspace_id and either session_id or trace_id are required", success: false },
+                { status: 400 }
+            );
+        }
+
+        // Verify workspace ownership
+        const { data: ws, error: wsError } = await supabase
+            .from("workspace")
+            .select("id")
+            .eq("id", workspace_id)
+            .eq("cust_id", user.id)
+            .maybeSingle();
+
+        if (wsError || !ws) {
+            return NextResponse.json({ message: "Workspace not found or unauthorized", success: false }, { status: 403 });
+        }
+
+        if (session_id) {
+            // 1. Delete all agent traces for this session
+            const { error: traceError } = await supabase
+                .from("agent_traces")
+                .delete()
+                .eq("workspace_id", workspace_id)
+                .eq("session_id", session_id);
+
+            if (traceError) {
+                console.error("Error deleting session traces:", traceError);
+                return NextResponse.json({ message: `Failed to delete session traces: ${traceError.message}`, success: false }, { status: 500 });
+            }
+
+            // 2. Delete messages for this session
+            await supabase
+                .from("messages")
+                .delete()
+                .eq("workspace_id", workspace_id)
+                .eq("session_id", session_id);
+
+            // 3. Invalidate Redis Caches
+            if (redisClient) {
+                try {
+                    const trackerSetKey = `workspace_trace_keys:${workspace_id}`;
+                    const metricsKey = `observability_metrics:${workspace_id}`;
+                    const historyKey = `chat_history:${session_id}`;
+                    const keysToDelete = [metricsKey, trackerSetKey, historyKey];
+
+                    const registeredKeys = await redisClient.smembers(trackerSetKey);
+                    if (registeredKeys && registeredKeys.length > 0) {
+                        keysToDelete.push(...registeredKeys);
+                    }
+
+                    await redisClient.del(...keysToDelete);
+                    console.log(`[Observability Traces] Purged Redis cache for session: ${session_id}`);
+                } catch (rErr) {
+                    console.warn("[Observability Traces] Redis purge error:", rErr);
+                }
+            }
+
+            return NextResponse.json({
+                message: `Session ${session_id} traces deleted successfully`,
+                success: true,
+            });
+        } else if (trace_id) {
+            // Delete single trace
+            const { error: traceError } = await supabase
+                .from("agent_traces")
+                .delete()
+                .eq("workspace_id", workspace_id)
+                .eq("id", trace_id);
+
+            if (traceError) {
+                console.error("Error deleting trace:", traceError);
+                return NextResponse.json({ message: `Failed to delete trace: ${traceError.message}`, success: false }, { status: 500 });
+            }
+
+            // Invalidate Redis Caches
+            if (redisClient) {
+                try {
+                    const trackerSetKey = `workspace_trace_keys:${workspace_id}`;
+                    const metricsKey = `observability_metrics:${workspace_id}`;
+                    const keysToDelete = [metricsKey, trackerSetKey];
+
+                    const registeredKeys = await redisClient.smembers(trackerSetKey);
+                    if (registeredKeys && registeredKeys.length > 0) {
+                        keysToDelete.push(...registeredKeys);
+                    }
+
+                    await redisClient.del(...keysToDelete);
+                } catch (rErr) {
+                    console.warn("[Observability Traces] Redis purge error:", rErr);
+                }
+            }
+
+            return NextResponse.json({
+                message: `Trace ${trace_id} deleted successfully`,
+                success: true,
+            });
+        }
+    } catch (error: any) {
+        console.error("Delete traces endpoint error:", error);
+        return NextResponse.json({ message: error.message || "Internal server error", success: false }, { status: 500 });
+    }
+}

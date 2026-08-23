@@ -7,6 +7,7 @@ import Button from "./ui/Button";
 import Modal from "./ui/Modal";
 import Input from "./ui/Input";
 import { SkeletonRow } from "./ui/Skeleton";
+import { toast } from "../lib/ToastContext";
 
 interface ObservabilitySectionProps {
   workspaceId: string;
@@ -298,6 +299,90 @@ export default function ObservabilitySection({ workspaceId, activeTabProp, hideT
 
   // Selected Trace Modal
   const [selectedTrace, setSelectedTrace] = useState<Trace | null>(null);
+
+  // Deletion States & Modals
+  const [confirmDeleteSession, setConfirmDeleteSession] = useState<string | null>(null);
+  const [confirmDeleteTrace, setConfirmDeleteTrace] = useState<Trace | null>(null);
+  const [deletingSession, setDeletingSession] = useState(false);
+  const [deletingTrace, setDeletingTrace] = useState(false);
+
+  const handleDeleteSession = async (sessionId: string) => {
+    setDeletingSession(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+
+      const res = await fetch("/api/customer/observability/traces", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: session.access_token,
+        },
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          session_id: sessionId,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to delete session traces");
+      }
+
+      toast.success("Session traces and history deleted successfully!");
+      setConfirmDeleteSession(null);
+      if (selectedSessionId === sessionId) {
+        setSelectedSessionId(null);
+      }
+      setTraces((prev) => prev.filter((t) => t.session_id !== sessionId));
+      setGaps((prev) => prev.filter((g) => g.session_id !== sessionId));
+      fetchObservabilityData();
+    } catch (err: any) {
+      console.error("Delete session error:", err);
+      toast.error(err.message || "Failed to delete session traces");
+    } finally {
+      setDeletingSession(false);
+    }
+  };
+
+  const handleDeleteTrace = async (traceId: string) => {
+    setDeletingTrace(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+
+      const res = await fetch("/api/customer/observability/traces", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: session.access_token,
+        },
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          trace_id: traceId,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to delete trace");
+      }
+
+      toast.success("Execution trace deleted successfully!");
+      setConfirmDeleteTrace(null);
+      if (selectedTrace?.id === traceId) {
+        setSelectedTrace(null);
+      }
+      setTraces((prev) => prev.filter((t) => t.id !== traceId));
+      setGaps((prev) => prev.filter((g) => g.trace_id !== traceId));
+      fetchObservabilityData();
+    } catch (err: any) {
+      console.error("Delete trace error:", err);
+      toast.error(err.message || "Failed to delete trace");
+    } finally {
+      setDeletingTrace(false);
+    }
+  };
 
   const fetchObservabilityData = async () => {
     setLoading(true);
@@ -787,11 +872,10 @@ export default function ObservabilitySection({ workspaceId, activeTabProp, hideT
                       const firstQuery = session.traces[0]?.query || "Empty conversation";
 
                       return (
-                        <button
+                        <div
                           key={session.sessionId}
-                          onClick={() => setSelectedSessionId(session.sessionId)}
                           className={`
-                            w-full text-left p-3.5 transition-colors cursor-pointer block
+                            group relative w-full transition-colors
                             ${
                               isSelected
                                 ? "bg-[var(--fn-accent-subtle)] border-l-3 border-[var(--fn-accent)]"
@@ -799,34 +883,53 @@ export default function ObservabilitySection({ workspaceId, activeTabProp, hideT
                             }
                           `}
                         >
-                          <div className="flex items-center justify-between gap-2 mb-1">
-                            <span className="text-xs font-mono font-semibold text-[var(--fn-text)] truncate max-w-[140px]">
-                              {session.sessionId}
-                            </span>
-                            <span className="text-[10px] text-[var(--fn-text-tertiary)] shrink-0 font-mono">
-                              {new Date(session.lastTimestamp).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </span>
-                          </div>
+                          <button
+                            onClick={() => setSelectedSessionId(session.sessionId)}
+                            className="w-full text-left p-3.5 pr-10 cursor-pointer block"
+                          >
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <span className="text-xs font-mono font-semibold text-[var(--fn-text)] truncate max-w-[140px]">
+                                {session.sessionId}
+                              </span>
+                              <span className="text-[10px] text-[var(--fn-text-tertiary)] shrink-0 font-mono">
+                                {new Date(session.lastTimestamp).toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                            </div>
 
-                          <p className="text-xs text-[var(--fn-text-secondary)] truncate line-clamp-1 mb-2 font-medium">
-                            "{firstQuery}"
-                          </p>
+                            <p className="text-xs text-[var(--fn-text-secondary)] truncate line-clamp-1 mb-2 font-medium">
+                              "{firstQuery}"
+                            </p>
 
-                          <div className="flex items-center justify-between text-[11px]">
-                            <span className="text-[var(--fn-text-tertiary)]">
-                              {session.messageCount} msg{session.messageCount > 1 ? "s" : ""} · {session.totalTokens} toks
-                            </span>
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="text-[var(--fn-text-tertiary)]">
+                                {session.messageCount} msg{session.messageCount > 1 ? "s" : ""} · {session.totalTokens} toks
+                              </span>
 
-                            {session.hasGap ? (
-                              <Badge variant="warning">Gap Detected</Badge>
-                            ) : (
-                              <Badge variant="success">All Matched</Badge>
-                            )}
-                          </div>
-                        </button>
+                              {session.hasGap ? (
+                                <Badge variant="warning">Gap Detected</Badge>
+                              ) : (
+                                <Badge variant="success">All Matched</Badge>
+                              )}
+                            </div>
+                          </button>
+
+                          {/* Quick Delete Session Button on Hover */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmDeleteSession(session.sessionId);
+                            }}
+                            className="absolute right-2.5 top-3 p-1.5 rounded-md text-[var(--fn-text-tertiary)] hover:text-rose-500 hover:bg-rose-500/10 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                            title="Delete session traces"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                            </svg>
+                          </button>
+                        </div>
                       );
                     })
                   )}
@@ -880,6 +983,16 @@ export default function ObservabilitySection({ workspaceId, activeTabProp, hideT
                         <span className="bg-[var(--fn-surface)] border border-[var(--fn-border)] px-2.5 py-1 rounded-[var(--fn-radius-sm)] font-mono text-[var(--fn-text-secondary)] text-[10px] sm:text-[11px]">
                           {currentSelectedSession.totalDurationMs}ms latency
                         </span>
+                        <button
+                          onClick={() => setConfirmDeleteSession(currentSelectedSession.sessionId)}
+                          className="px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 text-[11px] font-semibold transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 shadow-xs"
+                          title="Delete all traces and messages for this session"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                          </svg>
+                          <span>Delete Session</span>
+                        </button>
                       </div>
                     </div>
 
@@ -1046,7 +1159,7 @@ export default function ObservabilitySection({ workspaceId, activeTabProp, hideT
                               )}
                             </td>
                             <td className="p-3.5 text-right">
-                              <div className="flex items-center justify-end gap-2">
+                              <div className="flex items-center justify-end gap-1.5">
                                 <Button
                                   variant="secondary"
                                   size="sm"
@@ -1065,6 +1178,15 @@ export default function ObservabilitySection({ workspaceId, activeTabProp, hideT
                                 >
                                   Thread →
                                 </Button>
+                                <button
+                                  onClick={() => setConfirmDeleteTrace(trace)}
+                                  className="p-1.5 rounded-lg text-[var(--fn-text-tertiary)] hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                                  title="Delete this execution trace"
+                                >
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                  </svg>
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -1146,12 +1268,21 @@ export default function ObservabilitySection({ workspaceId, activeTabProp, hideT
                     </div>
                   </div>
 
-                  {/* Right: Highly Highlighted Missing Doc Info Badge */}
-                  <div className="shrink-0 self-start sm:self-center">
+                  {/* Right: Highly Highlighted Missing Doc Info Badge & Delete Action */}
+                  <div className="shrink-0 self-start sm:self-center flex items-center gap-2">
                     <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold tracking-wide bg-rose-500/15 text-rose-400 border border-rose-500/50 shadow-md shadow-rose-950/30">
                       <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse shrink-0" />
                       Missing Document Info
                     </span>
+                    <button
+                      onClick={() => setConfirmDeleteSession(gap.session_id)}
+                      className="p-1.5 rounded-lg text-[var(--fn-text-tertiary)] hover:text-rose-500 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-all cursor-pointer"
+                      title="Delete this session conversation and gap trace"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
               ))}
@@ -1195,9 +1326,22 @@ export default function ObservabilitySection({ workspaceId, activeTabProp, hideT
               <span className="text-xs font-mono text-[var(--fn-text-tertiary)]">
                 Trace ID: {selectedTrace.id || "N/A"}
               </span>
-              <Button size="sm" onClick={() => setSelectedTrace(null)}>
-                Close Trace
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => {
+                    const t = selectedTrace;
+                    setSelectedTrace(null);
+                    setConfirmDeleteTrace(t);
+                  }}
+                >
+                  Delete Trace
+                </Button>
+                <Button size="sm" onClick={() => setSelectedTrace(null)}>
+                  Close Trace
+                </Button>
+              </div>
             </div>
           }
         >
@@ -1416,6 +1560,88 @@ export default function ObservabilitySection({ workspaceId, activeTabProp, hideT
       })()}
     </Modal>
   )}
+
+  {/* ============================================================
+      MODAL: CONFIRM DELETE SESSION TRACES
+      ============================================================ */}
+  <Modal
+    isOpen={!!confirmDeleteSession}
+    onClose={() => !deletingSession && setConfirmDeleteSession(null)}
+    title="Delete Session Traces"
+    footer={
+      <>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => setConfirmDeleteSession(null)}
+          disabled={deletingSession}
+        >
+          Cancel
+        </Button>
+        <Button
+          variant="danger"
+          size="sm"
+          onClick={() => confirmDeleteSession && handleDeleteSession(confirmDeleteSession)}
+          loading={deletingSession}
+        >
+          Delete Session
+        </Button>
+      </>
+    }
+  >
+    <div className="space-y-3">
+      <p className="text-sm text-[var(--fn-text)] leading-relaxed">
+        Are you sure you want to delete all execution traces and conversation messages for session{" "}
+        <span className="font-mono font-semibold text-[var(--fn-text)] bg-[var(--fn-surface)] px-1.5 py-0.5 rounded border border-[var(--fn-border)] select-all">
+          {confirmDeleteSession}
+        </span>?
+      </p>
+      <p className="text-xs text-[var(--fn-text-secondary)]">
+        This will permanently remove the conversation history from PostgreSQL and invalidate the Redis chat memory and observability caches. This action cannot be undone.
+      </p>
+    </div>
+  </Modal>
+
+  {/* ============================================================
+      MODAL: CONFIRM DELETE INDIVIDUAL TRACE
+      ============================================================ */}
+  <Modal
+    isOpen={!!confirmDeleteTrace}
+    onClose={() => !deletingTrace && setConfirmDeleteTrace(null)}
+    title="Delete Execution Trace"
+    footer={
+      <>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => setConfirmDeleteTrace(null)}
+          disabled={deletingTrace}
+        >
+          Cancel
+        </Button>
+        <Button
+          variant="danger"
+          size="sm"
+          onClick={() => confirmDeleteTrace && handleDeleteTrace(confirmDeleteTrace.id)}
+          loading={deletingTrace}
+        >
+          Delete Trace
+        </Button>
+      </>
+    }
+  >
+    <div className="space-y-3">
+      <p className="text-sm text-[var(--fn-text)] leading-relaxed">
+        Are you sure you want to delete the execution trace for query:{" "}
+        <span className="font-semibold text-[var(--fn-text)] bg-[var(--fn-surface)] px-1.5 py-0.5 rounded border border-[var(--fn-border)]">
+          "{confirmDeleteTrace?.query}"
+        </span>?
+      </p>
+      <p className="text-xs text-[var(--fn-text-secondary)]">
+        This will permanently purge this execution record from the database and refresh the telemetry metrics cache.
+      </p>
+    </div>
+  </Modal>
     </div>
   );
 }
