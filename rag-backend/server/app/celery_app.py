@@ -1,5 +1,6 @@
 import os
 from celery import Celery
+from celery.signals import worker_ready, worker_shutdown
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -23,3 +24,15 @@ celery_app.conf.update(
     task_track_started=True,
     imports=["app.tasks"],
 )
+
+@worker_ready.connect
+def on_worker_ready(**kwargs):
+    print("=" * 65)
+    print("🟢 [Celery Worker] Worker initialized and ready!")
+    print(f"📦 [Celery Worker] Connected to Redis broker at: {REDIS_URL}")
+    print("⚡ [Celery Worker] Listening for background document ingestion & deletion tasks...")
+    print("=" * 65)
+
+@worker_shutdown.connect
+def on_worker_shutdown(**kwargs):
+    print("🛑 [Celery Worker] Shutting down Celery worker...")

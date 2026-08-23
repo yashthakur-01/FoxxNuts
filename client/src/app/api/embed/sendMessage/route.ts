@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import supabase from "../../../../supabase/adminClient";
 import redisClient from "../../../../lib/redisClient";
+import { checkRateLimit, RATE_LIMIT_TIERS, formatResetTime } from "../../../../lib/rateLimit";
 
 export async function POST(request: NextRequest) {
     try {
@@ -109,7 +110,62 @@ export async function POST(request: NextRequest) {
         }
 
         // =========================================================================
-        // 3. SAVE HUMAN MESSAGE TO SUPABASE (Direct DB Write - No async background)
+        // 3. RATE LIMITING CHECKS (Visitor Burst + Client Account Daily Quota)
+        // =========================================================================
+        // A. Visitor session burst protection (15 messages/minute)
+        const visitorRate = await checkRateLimit(
+            `visitor:${session_id}`,
+            RATE_LIMIT_TIERS.VISITOR_MINUTE
+        );
+        if (!visitorRate.allowed) {
+            const timeUntilReset = formatResetTime(visitorRate.resetInSeconds);
+            return NextResponse.json(
+                {
+                    message: `You are sending messages too quickly. Please wait ${timeUntilReset} before sending another message.`,
+                    remaining: 0,
+                    resetInSeconds: visitorRate.resetInSeconds,
+                    success: false,
+                },
+                {
+                    status: 429,
+                    headers: {
+                        "Retry-After": visitorRate.resetInSeconds.toString(),
+                        "X-RateLimit-Limit": "15",
+                        "X-RateLimit-Remaining": "0",
+                    },
+                }
+            );
+        }
+
+        // B. Client account daily quota across all workspaces (200 messages/24h)
+        if (cust_id) {
+            const clientDailyRate = await checkRateLimit(
+                `client_daily_msgs:${cust_id}`,
+                RATE_LIMIT_TIERS.CLIENT_DAILY_MESSAGES
+            );
+            if (!clientDailyRate.allowed) {
+                const timeUntilReset = formatResetTime(clientDailyRate.resetInSeconds);
+                return NextResponse.json(
+                    {
+                        message: `This chatbot has reached its daily message limit (200 messages/day). Limit resets in ${timeUntilReset}.`,
+                        remaining: 0,
+                        resetInSeconds: clientDailyRate.resetInSeconds,
+                        success: false,
+                    },
+                    {
+                        status: 429,
+                        headers: {
+                            "Retry-After": clientDailyRate.resetInSeconds.toString(),
+                            "X-RateLimit-Limit": "200",
+                            "X-RateLimit-Remaining": "0",
+                        },
+                    }
+                );
+            }
+        }
+
+        // =========================================================================
+        // 4. SAVE HUMAN MESSAGE TO SUPABASE (Direct DB Write - No async background)
         // =========================================================================
         await supabase
             .from("messages")

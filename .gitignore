@@ -1,0 +1,58 @@
+# =============================================================================
+# FoxxNuts AI Platform — Git Ignore Specification
+# =============================================================================
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Python / Virtual Environments / Caches
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Next.js & TypeScript Build Artifacts
+client/.next/
+client/out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Environment & Secrets (Never commit secrets)
+.env
+.env*.local
+.env.development
+.env.production
+client/.env
+rag-backend/.env
+
+# Temporary Files, Scratch Docs & Logs
+temp/
+temp*
+*.tmp
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+scratch/
+
+# Local Documentation & Draft Design Artifacts
+design.md
+query_flow_implementation.md
+FOXXNUTS_KNOWLEDGE_BASE.md
+docs/
+
+# IDE & Operating System
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo

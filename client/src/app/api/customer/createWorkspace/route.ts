@@ -26,8 +26,20 @@ export async function POST(request: NextRequest){
         }
 
         if(existingWorkspace){
-            return NextResponse.json({message:"Workspace url slug already exists, try another one"})
+            return NextResponse.json({message:"Workspace url slug already exists, try another one", success: false}, {status: 400});
         }
+
+        // Ensure user exists in public.users to satisfy foreign key constraint
+        const userEmail = user.email || "";
+        const userName = (user as any).user_metadata?.name || userEmail.split("@")[0] || "User";
+        await supabase.from("users").upsert(
+            {
+                id: cust_id,
+                email: userEmail,
+                name: userName,
+            },
+            { onConflict: "id", ignoreDuplicates: true }
+        );
 
         const {data: newWorkspace, error: insertError} = await supabase.from("workspace").insert([{
             workspace_name: workspace_name,

@@ -8,10 +8,10 @@ langgraph
 celery
 redis
 pymupdf
-markitdown[all]
+markitdown
 langchain-cohere 
 cohere
-dotenv
+python-dotenv
 langchain-pinecone
 boto3
 langchain-google-genai

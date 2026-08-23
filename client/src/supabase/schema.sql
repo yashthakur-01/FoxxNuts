@@ -13,9 +13,11 @@ CREATE TABLE public.workspace (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     cust_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
     workspace_name TEXT DEFAULT 'Demo Workspace',
+    workspace_description TEXT,
     workspace_url TEXT,
+    onboarding_completed BOOLEAN DEFAULT false,
     temperature NUMERIC DEFAULT 0.7,
-    model_name TEXT DEFAULT 'llama-3.3-70b-versatile',
+    model_name TEXT DEFAULT 'openai/gpt-oss-120b',
     provider TEXT DEFAULT 'groq',
     system_prompt TEXT DEFAULT 'You are a helpful assistant.',
     llm_api_key TEXT,
@@ -23,7 +25,16 @@ CREATE TABLE public.workspace (
     chunk_size INTEGER DEFAULT 1024,
     chunk_overlap INTEGER DEFAULT 250,
     similarity_threshold NUMERIC DEFAULT 0.6,
+    top_k INTEGER DEFAULT 5,
     allowed_domains TEXT DEFAULT '*',
+    chatbot_name TEXT DEFAULT 'AI Assistant',
+    chatbot_description TEXT,
+    chatbot_avatar TEXT,
+    primary_color TEXT DEFAULT '#E50914',
+    welcome_message TEXT DEFAULT 'Hello! How can I help you today?',
+    suggested_questions JSONB DEFAULT '[]'::jsonb,
+    widget_position TEXT DEFAULT 'bottom-right',
+    chatbot_theme TEXT DEFAULT 'dark',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
@@ -129,3 +140,26 @@ FOR ALL USING (
         SELECT id FROM public.workspace WHERE cust_id = auth.uid()
     )
 );
+
+-- ==========================================
+-- AUTOMATIC USER SYNC TRIGGER (AUTH -> PUBLIC)
+-- ==========================================
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.users (id, email, name)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1))
+  )
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();

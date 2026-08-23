@@ -1,26 +1,206 @@
+@import url('https://api.fontshare.com/v2/css?f[]=satoshi@900,800,700,600,500,400&display=swap');
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ============================================================
+   FoxxNuts Design System — CSS Custom Properties
+   ============================================================ */
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: var(--fn-bg);
+  --color-foreground: var(--fn-text);
+  --color-surface: var(--fn-surface);
+  --color-elevated: var(--fn-elevated);
+  --color-border: var(--fn-border);
+  --color-accent: var(--fn-accent);
+  --color-accent-hover: var(--fn-accent-hover);
+  --color-text-secondary: var(--fn-text-secondary);
+  --color-text-tertiary: var(--fn-text-tertiary);
+  --font-sans: 'Satoshi', var(--font-inter), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* --- Dark Mode (Subtle Lighter Shade of Black for Surfaces & Components) --- */
+:root {
+  --fn-bg: #090A0D;
+  --fn-surface: #13151B;
+  --fn-elevated: #1C1E26;
+  --fn-border: #272A35;
+  --fn-border-subtle: #1E212B;
+  --fn-text: #F8F9FA;
+  --fn-text-secondary: #A6ADBB;
+  --fn-text-tertiary: #6C7280;
+  --fn-accent: #FF1E27;
+  --fn-accent-hover: #E00E17;
+  --fn-accent-subtle: rgba(255, 30, 39, 0.12);
+  --fn-accent-glow: rgba(255, 30, 39, 0.2);
+  --fn-success: #22C55E;
+  --fn-warning: #EAB308;
+  --fn-error: #EF4444;
+  --fn-info: #3B82F6;
+  --fn-overlay: rgba(0, 0, 0, 0.7);
+  --fn-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --fn-shadow-md: 0 4px 14px rgba(0, 0, 0, 0.5);
+  --fn-shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.6);
+  --fn-radius-sm: 6px;
+  --fn-radius: 8px;
+  --fn-radius-lg: 12px;
+  --fn-radius-xl: 16px;
+  color-scheme: dark;
+}
+
+/* --- Light Mode --- */
+.light {
+  --fn-bg: #F8F9FA;
+  --fn-surface: #FFFFFF;
+  --fn-elevated: #F1F3F5;
+  --fn-border: #E2E4E8;
+  --fn-border-subtle: #ECEEF2;
+  --fn-text: #0A0A0C;
+  --fn-text-secondary: #4B5563;
+  --fn-text-tertiary: #9CA3AF;
+  --fn-accent: #DC2626;
+  --fn-accent-hover: #B91C1C;
+  --fn-accent-subtle: rgba(220, 38, 38, 0.08);
+  --fn-accent-glow: rgba(220, 38, 38, 0.12);
+  --fn-success: #16A34A;
+  --fn-warning: #CA8A04;
+  --fn-error: #DC2626;
+  --fn-info: #2563EB;
+  --fn-overlay: rgba(0, 0, 0, 0.4);
+  --fn-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --fn-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --fn-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+  color-scheme: light;
+}
+
+/* ============================================================
+   Base Styles — Universal Satoshi Typography
+   ============================================================ */
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, input, button, select, textarea, p, h1, h2, h3, h4, h5, h6, span, div, a, label {
+  font-family: 'Satoshi', var(--font-inter), system-ui, -apple-system, sans-serif;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--fn-bg);
+  color: var(--fn-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================================
+   Scrollbar & Utilities
+   ============================================================ */
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--fn-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--fn-text-tertiary);
+}
+
+/* ============================================================
+   Focus Ring
+   ============================================================ */
+
+*:focus-visible {
+  outline: 2px solid var(--fn-accent);
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   Animations & Staggered Typography Effects
+   ============================================================ */
+
+@keyframes fn-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fn-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fn-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fn-letter-stagger {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-fn-letter-stagger {
+  animation: fn-letter-stagger 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes fn-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fn-pop {
+  animation: fn-pop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.animate-fn-fade-in {
+  animation: fn-fade-in 0.2s ease-out;
+}
+
+.animate-fn-slide-down {
+  animation: fn-slide-down 0.2s ease-out;
+}
+
+.animate-fn-slide-up {
+  animation: fn-slide-up 0.2s ease-out;
 }

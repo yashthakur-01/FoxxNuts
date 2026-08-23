@@ -39,7 +39,7 @@ async def return_message(body: MessageRequest):
         workspace_data = await asyncio.to_thread(get_cached_workspace_config, body.workspace_id)
 
         temperature = workspace_data.get("temperature", 0.7)
-        model_name = workspace_data.get("model_name", "gpt-4o")
+        model_name = workspace_data.get("model_name", "openai/gpt-oss-120b")
         provider = workspace_data.get("provider", "openai")
         system_prompt = workspace_data.get("system_prompt", "You are a helpful assistant.")
         search_enabled = workspace_data.get("search_enabled", False)
@@ -104,22 +104,7 @@ async def return_message(body: MessageRequest):
             
             try:
                 async for event in agent.astream_events(initial_state, config, version="v2"):
-                    if event["event"] == "on_chat_model_stream":
-                        node = event.get("metadata", {}).get("langgraph_node")
-                        if node not in STREAMABLE_NODES:
-                            continue
-
-                        if node != current_streaming_node:
-                            if current_streaming_node is not None:
-                                full_response = ""
-                            current_streaming_node = node
-
-                        chunk = event["data"]["chunk"].content
-                        if chunk:
-                            full_response += chunk
-                            yield chunk
-                            
-                    elif event["event"] == "on_chain_end":
+                    if event["event"] == "on_chain_end":
                         output = event["data"].get("output")
                         if isinstance(output, dict) and "system_prompt" in output and "trajectory" in output:
                             trajectory = output["trajectory"]
@@ -133,12 +118,16 @@ async def return_message(body: MessageRequest):
                                 if output["route"][0] == "generic_or_repetitive":
                                     query_type = "generic_or_repetitive"
                             
-                            # Fallback if non-LLM streaming node returned an AIMessage in final state
-                            if not full_response and "messages" in output and output["messages"]:
+                            # Deliver only the final validated/approved AI response
+                            if "messages" in output and output["messages"]:
                                 last_msg = output["messages"][-1]
                                 if hasattr(last_msg, "content") and last_msg.content:
                                     full_response = str(last_msg.content)
-                                    yield full_response
+                                    # Stream the final response smoothly in natural chunks
+                                    chunk_size = 16
+                                    for i in range(0, len(full_response), chunk_size):
+                                        yield full_response[i:i + chunk_size]
+                                        await asyncio.sleep(0.01)
                             
                 # Calculate metrics
                 total_tokens = 0

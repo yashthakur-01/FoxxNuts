@@ -99,7 +99,6 @@ async def conditional_router_node_1(state: AgentState,config: RunnableConfig):
     this is a conditional router that returns the response as generic_or_repetitive or genuine_query on 
     the basis of the query and chat history
     """
-    state['trajectory']
 
     messages = state["messages"]
     provider = state["model"]["provider"]
@@ -107,34 +106,71 @@ async def conditional_router_node_1(state: AgentState,config: RunnableConfig):
     temperature = state["model"]["temperature"]
     max_tokens = state["model"]["max_tokens"]
     llm = get_model_instance(provider, model_name, temperature, max_tokens)
-    if provider=='groq':
-        llm = llm.with_structured_output(ConditionalRouterOutput, method="function_calling", include_raw=True)
-    else:
-        llm = llm.with_structured_output(ConditionalRouterOutput, include_raw=True)
-
     
-    system_prompt = SystemMessage(content="""You are an intent classifier for an enterprise document search & RAG assistant. Classify the user's latest query:
+    system_prompt = SystemMessage(content="""You are an intent classifier for an enterprise document search & RAG assistant.
+Review the user's latest query along with the conversation history:
 
 CLASSIFICATION RULES:
-1. 'generic_or_repetitive': Return ONLY for basic greetings, pleasantries, chit-chat, or identity questions.
-   - Examples: "hello", "hi there", "how are you?", "thank you", "bye", "who created you?".
+1. 'generic_or_repetitive': Return this route if ANY of the following apply:
+   a) Basic greetings, pleasantries, user self-introductions, chit-chat, or identity questions (e.g. "hello", "my name is yash", "who are you?", "thank you", "bye").
+   b) The query can be answered directly from the previous conversation history with high accuracy and NO ambiguity, without needing to retrieve new external knowledge documents.
+      - Examples: "what was my name?", "what did I ask earlier?", "can you summarize what you just told me?", "repeat your last response", "explain that last point further".
 
-2. 'genuine_query': Return for ANY question about business, policies, procedures, compensation/salary, technical details, or document content, OR requests to expand/rephrase an answer.
-   - Examples: "whats the monthly salary types", "what is the leave policy?", "explain section 3", "regenerate that answer with details".
+2. 'genuine_query': Return this route if:
+   - The query asks for new factual knowledge, company policies, procedures, technical details, or document information that is NOT already clearly and unambiguously answered in the conversation history.
 
-3. DEFAULT RULE: If uncertain whether a question is generic vs document-related, ALWAYS choose 'genuine_query' to retrieve document context.
+3. DEFAULT RULE: If uncertain whether a question requires new document retrieval vs conversation history, choose 'genuine_query'.
 
-Output exactly one: 'generic_or_repetitive' or 'genuine_query'.""")
+Output JSON: {"route": "generic_or_repetitive"} or {"route": "genuine_query"}""")
     
     full_messages = [system_prompt] + messages
     
-    await asyncio.sleep(2.5)
-    response = await llm.ainvoke(full_messages)
+    route_value = "genuine_query"
+    raw_message = None
 
-    parsed_output = response["parsed"]
-    raw_message = response["raw"]
+    try:
+        if provider == 'groq':
+            # Use direct JSON invocation for Groq to avoid "Tool choice is required" API errors
+            response = await llm.ainvoke(full_messages)
+            raw_message = response.content
+            content = str(response.content).strip().lower()
+            
+            if "generic_or_repetitive" in content:
+                route_value = "generic_or_repetitive"
+            elif "genuine_query" in content:
+                route_value = "genuine_query"
+            else:
+                import json
+                try:
+                    parsed = json.loads(content)
+                    if isinstance(parsed, dict) and "route" in parsed:
+                        route_value = parsed["route"]
+                except Exception:
+                    route_value = "genuine_query"
+        else:
+            structured_llm = llm.with_structured_output(ConditionalRouterOutput, include_raw=True)
+            response = await structured_llm.ainvoke(full_messages)
+            raw_message = response.get("raw")
+            parsed_output = response.get("parsed")
+            if parsed_output and isinstance(parsed_output, dict) and "route" in parsed_output:
+                route_value = parsed_output["route"]
+            else:
+                route_value = "genuine_query"
+    except Exception as err:
+        print(f"[WARNING] genuine_generic_router encountered an error ({err}), falling back to direct prompt extraction...")
+        try:
+            fallback_response = await llm.ainvoke(full_messages)
+            raw_message = fallback_response.content
+            content_lower = str(fallback_response.content).lower()
+            if "generic_or_repetitive" in content_lower:
+                route_value = "generic_or_repetitive"
+            else:
+                route_value = "genuine_query"
+        except Exception:
+            route_value = "genuine_query"
 
-    return {"route": [parsed_output["route"]], "current_context": None, "node_output": [raw_message]}
+    print(f"[genuine_generic_router] Final classified route: '{route_value}'")
+    return {"route": [route_value], "current_context": None, "node_output": [raw_message]}
 
 @observable_node("context_retriver")
 async def retrieve_context(state:AgentState, config: RunnableConfig):
@@ -149,8 +185,10 @@ async def retrieve_context(state:AgentState, config: RunnableConfig):
     workspaceId = configurable.get("workspaceId", "")
     similarityThreshold = float(configurable.get("similarityThreshold", 0.6))
     
+    print(f"  ↳ [Vector Retrieval] Querying Pinecone hybrid index for: '{query}' (threshold={similarityThreshold})")
     context = await fetch_context_from_vector_db(query, customerId, workspaceId, similarity_threshold=similarityThreshold)
     is_context_found = bool(context and context.strip())
+    print(f"  ↳ [Vector Retrieval] Result: {len(context) if context else 0} chars retrieved | Context match: {is_context_found}")
     return {
         "retrived_context": [context],
         "current_context": context,
@@ -244,7 +282,6 @@ async def chatbot_node(state: AgentState, config: RunnableConfig):
     system_prompt = state["system_prompt"]
     search_enabled = state.get('search_enabled',False)
     
-    
     base_model = get_model_instance(model_provider, model_name, temperature, max_tokens)
     if search_enabled:
         base_model = base_model.bind_tools([web_search])
@@ -254,17 +291,16 @@ async def chatbot_node(state: AgentState, config: RunnableConfig):
         retrieved_context = state.get("messages",[{"content": "SYSTEM OBSERVATION: unable to fetch the context"}])[-1].content
     messages = [SystemMessage(content=f"""{system_prompt}
 
-STRICT CONTEXT GROUNDING & RESPONSE RULES:
-1. Grounding: Answer the query relying ONLY on the RETRIEVED CONTEXT provided below. Do NOT use unverified outside facts or assumptions.
-2. Anti-Hallucination: If the answer is not present in or directly inferable from the context, respond strictly with:
-   "I cannot find this information in the provided context."
-3. Partial Information: If the context partially answers the query, answer what is directly supported and explicitly list the missing details.
-4. Structure: Keep responses clear, professional, and well-structured using bullet points where applicable.
+STRICT RESPONSE & GROUNDING RULES:
+1. Direct Answer: Answer the user's question directly, clearly, and naturally.
+2. NO Meta-Language: NEVER use phrases like "According to the provided context...", "Based on the given context...", "In the documents provided...", or "The context mentions...". Simply state the factual answer directly.
+3. Grounding: Rely strictly on facts present in the RETRIEVED CONTEXT below. Do NOT hallucinate or assume unverified outside details.
+4. Structure: Keep responses clean, well-formatted, and professional using bullet points where applicable.
 
 EXAMPLES:
 - Context: "Employee annual leave is 20 days. Health insurance covers full dental."
-  Query: "What is the leave policy?" -> "According to the provided context, annual leave for employees is 20 days."
-  Query: "What is the 401k match?" -> "I cannot find this information in the provided context."
+  Query: "What is the leave policy?" -> "Annual leave for employees is 20 days per calendar year."
+  Query: "What health benefits are included?" -> "Health insurance provides full dental coverage."
 
 QUERY:
 {state['query'][-1]}
@@ -273,8 +309,10 @@ RETRIEVED CONTEXT:
 {retrieved_context}
 """), *state["messages"][-5:]]
 
-    await asyncio.sleep(2.5)
+    print(f"  ↳ [Chatbot Node] Invoking {model_provider}/{model_name} (temp={temperature}, context_len={len(retrieved_context)} chars)...")
     response = await base_model.ainvoke(messages)
+    content_len = len(str(response.content)) if response and hasattr(response, "content") else 0
+    print(f"  ↳ [Chatbot Node] Grounded response drafted ({content_len} chars)")
     
     return {"messages": [response], "node_output": [response]}
 
@@ -286,20 +324,32 @@ async def generic_response_node(state: AgentState, config: RunnableConfig):
     routes to the end node directly without calling the LLM again
     '''
     
-    system_prompt = SystemMessage(content="""You are a polite, history-grounded assistant.
-- Answer casual greetings, pleasantries, or questions using ONLY conversation history.
-- If a question requires document knowledge not in history, politely inform the user to ask a specific topic question.
-- Keep responses brief, friendly, and direct.""")
+    system_prompt = SystemMessage(content="""You are a polite, helpful, and highly intelligent conversation assistant.
+Review the conversation history to answer the user's latest query:
+
+1. Direct Answers from History:
+   - If the user's query references past messages, previously provided user details (e.g. name, preferences), or previously explained topics from this session, frame a natural, direct, and accurate answer.
+   - Do NOT say "According to the chat history..." or "As mentioned earlier...". Answer directly.
+   - Example: Query: "What is my name?" -> "Your name is Yash."
+
+2. Greetings & Pleasantries:
+   - For greetings, self-introductions, or polite remarks, respond warmly and professionally, offering assistance with their knowledge documents.
+
+3. Out-of-Scope / Missing Info:
+   - If the query asks for new document knowledge that does NOT exist in the chat history, politely inform the user to ask a specific topic question so you can retrieve information from their documents.
+
+Keep your response clear, well-structured, friendly, and direct.""")
     
     model_provider = state["model"]["provider"]
     model_name = state["model"]["model_name"]
     temperature = state["model"]["temperature"]
     max_tokens = state["model"]["max_tokens"]
     
+    print(f"  ↳ [Generic Response Node] Generating conversational response from session history with {model_provider}/{model_name}...")
     llm_model = get_model_instance(model_provider, model_name, temperature, max_tokens)
     full_messages = [system_prompt] + state["messages"]
-    await asyncio.sleep(2.5)
     response = await llm_model.ainvoke(full_messages)
+    print(f"  ↳ [Generic Response Node] Conversational response generated ({len(str(response.content))} chars)")
     
     return {
         "messages": [response],
@@ -316,7 +366,9 @@ async def generic_response_node(state: AgentState, config: RunnableConfig):
 @observable_node("evalator_node")   
 async def response_evaluation_node(state:AgentState, config: RunnableConfig):
     max_iter = state.get("max_iter", 0)
+    print(f"  ↳ [Evaluator Node] Inspecting response quality (Iteration {max_iter + 1}/2)...")
     if max_iter >= 2:
+        print("  ↳ [Evaluator Node] Max iterations (2) reached -> Routing to 'unsatisfactory'")
         return {"route": ["unsatisfactory"], "node_output": [{"reason": "max_iter reached"}]}
     
     # Extract just the specific text the judge needs
@@ -350,19 +402,21 @@ Output EXACTLY one option:
     
     llm = get_model_instance(provider, model_name, temperature, max_tokens)
     
-    # ONLY pass the system prompt. We don't need the whole chat history!
     full_messages = [system_prompt] 
-    
-    await asyncio.sleep(2.5)
     response = await llm.ainvoke(full_messages)
+    raw_eval = str(response.content).strip()
 
-    if response.content.strip().lower() == "satisfactory":
+    if raw_eval.lower() == "satisfactory":
+        print(f"  ↳ [Evaluator Node] Verdict: 'satisfactory' -> Response approved for delivery")
         return {"route": ["satisfactory"], "max_iter": max_iter + 1, "node_output": [response]}
-    elif response.content.strip().lower().startswith("query_rephrase"):
+    elif raw_eval.lower().startswith("query_rephrase"):
+        print(f"  ↳ [Evaluator Node] Verdict: 'query_rephrase' -> {raw_eval}")
         return {"route": ["query_rephrase"], "max_iter": max_iter + 1, "remarks": response.content, "node_output": [response]}
-    elif response.content.strip().lower().startswith("clarify"):
+    elif raw_eval.lower().startswith("clarify"):
+        print(f"  ↳ [Evaluator Node] Verdict: 'clarify' -> {raw_eval}")
         return {"route": ["clarify"], "max_iter": max_iter + 1, "remarks": response.content, "node_output": [response]}
     else:
+        print(f"  ↳ [Evaluator Node] Verdict: 'revise' -> {raw_eval}")
         return {"route": ["revise"], "max_iter": max_iter + 1, "remarks": response.content, "node_output": [response]}
 
 @observable_node("query_rephraser_node")
@@ -372,7 +426,8 @@ async def query_rephraser_node(state:AgentState, config: RunnableConfig):
     """
     
     query = state["query"][-1]
-    remarks = state['remarks']
+    remarks = state.get('remarks', '')
+    print(f"  ↳ [Query Rephraser] Rephrasing ambiguous query '{query}' (Remarks: '{remarks}')...")
     system_prompt = SystemMessage(
             content=f"""You are an expert query rewriter for document retrieval.
 
@@ -397,28 +452,19 @@ Latest Query: {query}"""
     llm = get_model_instance(provider, model_name, temperature, max_tokens)
     
     full_messages = [system_prompt] + state["messages"]
-    
-    await asyncio.sleep(2.5)
     response = await llm.ainvoke(full_messages)
+    rewritten = str(response.content).strip()
+    print(f"  ↳ [Query Rephraser] Rewritten query: '{rewritten}' -> Re-entering vector retrieval")
     
-    return {"query": [response.content.strip()],"current_context": None, "messages": [HumanMessage(content=response.content.strip())], "node_output": [response]}
+    return {"query": [rewritten], "current_context": None, "messages": [HumanMessage(content=rewritten)], "node_output": [response]}
 
 @observable_node("unsatisfactory_handle_node")
 async def unsatisfactory_handler_node(state: AgentState, config: RunnableConfig):
     """
-    This node returns the most recent valid AI response with a disclaimer when max iterations is reached.
+    This node returns a clear response indicating the requested query could not be answered with the given knowledge base.
     """
-    last_ai_response = ""
-    for msg in reversed(state.get("messages", [])):
-        if isinstance(msg, AIMessage) and msg.content and isinstance(msg.content, str) and msg.content.strip():
-            last_ai_response = msg.content.strip()
-            break
-            
-    if not last_ai_response:
-        last_ai_response = "I don't have enough context in the uploaded documents to answer your query accurately."
-
-    disclaimer = "⚠️ Disclaimer: Maximum processing iterations reached. The response below may be incomplete:\n\n"
-    response = AIMessage(content=disclaimer + last_ai_response)
+    print("  ↳ [Unsatisfactory Handler] Fallback triggered: Query not answerable from knowledge base.")
+    response = AIMessage(content="The requested query could not be answered with the given knowledge base.")
     return {"disclaimer": True, "messages": [response], "node_output": [response]}
 
 @observable_node("clarify_node")
@@ -428,6 +474,7 @@ async def clarify_node(state: AgentState, config: RunnableConfig):
     """
     query = state["query"][-1] if state.get("query") else ""
     remarks = state.get('remarks', 'The query is too vague.')
+    print(f"  ↳ [Clarify Node] Requesting clarification for query: '{query}'...")
     system_prompt = SystemMessage(
             content=f"""Draft a polite, concise 1-sentence request asking the user to clarify their vague query.
 
@@ -443,32 +490,46 @@ Output ONLY the clarification request."""
     llm = get_model_instance(provider, model_name, temperature, max_tokens)
     
     full_messages = [system_prompt]
-    
-    await asyncio.sleep(2.5)
     response = await llm.ainvoke(full_messages)
     
     if not response.content or not isinstance(response.content, str) or not response.content.strip():
         response = AIMessage(content="Could you please provide more details or clarify your query?")
         
+    print(f"  ↳ [Clarify Node] Clarification message drafted ({len(str(response.content))} chars)")
     return {"messages": [response], "node_output": [response]}
 
 
 @observable_node("start_node")
 async def start_node(state: AgentState, config: RunnableConfig):
-    # Pass-through node to log the start state in trajectory
-    return {}
-
-
-@observable_node("start_node")
-def start_node(state: AgentState, config: RunnableConfig):
-    query = state["query"][-1]
+    query = state["query"][-1] if state.get("query") else ""
+    print(f"  ↳ [Start Node] Workflow initiated for query: '{query}'")
     msgs = state.get("messages", [])
     if not msgs or not any(isinstance(m, HumanMessage) and m.content == query for m in msgs):
         return {"messages": [HumanMessage(content=query)]}
     return {}
 
-def return_response(state: AgentState, config: RunnableConfig) -> str:
-    return state["route"][-1]
+def return_router_response(state: AgentState, config: RunnableConfig) -> str:
+    """Route after genuine_generic_router node."""
+    route_list = state.get("route", [])
+    decision = route_list[-1] if route_list else "genuine_query"
+    next_node = "generic_response_node" if decision == "generic_or_repetitive" else "context_retriver"
+    print(f"  ↳ [Graph Edge] Intent Router decision: '{decision}' -> Transitioning to: [{next_node}]")
+    return decision
+
+def return_evaluator_response(state: AgentState, config: RunnableConfig) -> str:
+    """Route after evalator_node."""
+    route_list = state.get("route", [])
+    decision = route_list[-1] if route_list else "satisfactory"
+    next_map = {
+        "satisfactory": "END (Delivering Final Answer)",
+        "unsatisfactory": "unsatisfactory_handle_node",
+        "query_rephrase": "query_rephraser_node",
+        "revise": "chatbot_node",
+        "clarify": "clarify_node"
+    }
+    next_node = next_map.get(decision, "END")
+    print(f"  ↳ [Graph Edge] Evaluator verdict: '{decision}' -> Transitioning to: [{next_node}]")
+    return decision
 
 
 
@@ -497,7 +558,7 @@ def get_chatbot_agent():
         
         graph_builder.add_edge(START, "start_node")
         graph_builder.add_edge("start_node", "genuine_generic_router")
-        graph_builder.add_conditional_edges("genuine_generic_router", return_response,
+        graph_builder.add_conditional_edges("genuine_generic_router", return_router_response,
                                            {
                                                "generic_or_repetitive": "generic_response_node",
                                                "genuine_query": "context_retriver"
@@ -510,7 +571,7 @@ def get_chatbot_agent():
                                                 }
         )
         graph_builder.add_edge("tools", "chatbot_node")
-        graph_builder.add_conditional_edges("evalator_node", return_response,{
+        graph_builder.add_conditional_edges("evalator_node", return_evaluator_response,{
                                                   "satisfactory": END,
                                                   "unsatisfactory":  "unsatisfactory_handle_node",
                                                   "query_rephrase": "query_rephraser_node",

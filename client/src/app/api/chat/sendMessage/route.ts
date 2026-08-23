@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import supabase from "../../../../supabase/adminClient";
 import { getCachedUser } from "../../../../lib/authCache";
+import { checkRateLimit, RATE_LIMIT_TIERS, formatResetTime } from "../../../../lib/rateLimit";
 
 export async function POST(request: NextRequest) {
     try {
@@ -20,6 +21,34 @@ export async function POST(request: NextRequest) {
 
         if (!customer_id) {
             return NextResponse.json({ message: `Unauthorized or missing customer ID: ${authError?.message}` }, { status: 401 });
+        }
+
+        // =========================================================================
+        // 1. CLIENT ACCOUNT DAILY MESSAGE RATE LIMIT (200 messages / 24-hour window)
+        // =========================================================================
+        const clientDailyRate = await checkRateLimit(
+            `client_daily_msgs:${customer_id}`,
+            RATE_LIMIT_TIERS.CLIENT_DAILY_MESSAGES
+        );
+
+        if (!clientDailyRate.allowed) {
+            const timeUntilReset = formatResetTime(clientDailyRate.resetInSeconds);
+            return NextResponse.json(
+                {
+                    message: `Daily message quota reached (200 messages/day). Resets in ${timeUntilReset}.`,
+                    remaining: 0,
+                    resetInSeconds: clientDailyRate.resetInSeconds,
+                    success: false,
+                },
+                {
+                    status: 429,
+                    headers: {
+                        "Retry-After": clientDailyRate.resetInSeconds.toString(),
+                        "X-RateLimit-Limit": "200",
+                        "X-RateLimit-Remaining": "0",
+                    },
+                }
+            );
         }
 
         // 2. Save the USER's message to the Supabase database

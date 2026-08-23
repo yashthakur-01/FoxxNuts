@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
 
         const { data: traces, error, count } = await supabase
             .from("agent_traces")
-            .select("id, session_id, query, final_response, total_tokens, total_duration_ms, trajectory, error_messages, query_context_pairs, context_found, query_type, created_at", { count: "exact" })
+            .select("id, session_id, query, final_response, total_tokens, total_duration_ms, trajectory, error_messages, query_context_pairs, query_type, created_at", { count: "exact" })
             .eq("workspace_id", workspace_id)
             .order("created_at", { ascending: false })
             .range(offset, offset + limit - 1);

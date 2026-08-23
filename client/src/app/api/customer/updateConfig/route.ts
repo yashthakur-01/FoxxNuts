@@ -24,6 +24,8 @@ export async function POST(request: NextRequest) {
     const allowedFields = [
         "chatbot_name", 
         "workspace_name",
+        "workspace_description",
+        "onboarding_completed",
         "system_prompt", 
         "temperature", 
         "model_name", 
@@ -36,7 +38,11 @@ export async function POST(request: NextRequest) {
         "similarity_threshold",
         "welcome_message",
         "suggested_questions",
-        "allowed_domains"
+        "allowed_domains",
+        "chatbot_description",
+        "chatbot_avatar",
+        "widget_position",
+        "chatbot_theme"
     ];
 
     const updatePayload: Record<string, any> = {};

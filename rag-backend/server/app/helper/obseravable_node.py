@@ -10,6 +10,45 @@ def observable_node(node_name):
     def decorator(func):
         is_async = inspect.iscoroutinefunction(func)
         
+        def log_entry(state):
+            query_preview = ""
+            if isinstance(state, dict) and "query" in state and state["query"]:
+                q = str(state["query"][-1])
+                query_preview = f" | Query: '{q[:50]}...'" if len(q) > 50 else f" | Query: '{q}'"
+            print(f"🔵 [Agent Trajectory] ▶ Entering Node: [{node_name}]{query_preview}")
+
+        def log_exit(final_result, duration, token_usage):
+            details = []
+            if isinstance(final_result, dict):
+                if "route" in final_result and final_result["route"]:
+                    details.append(f"route='{final_result['route'][-1]}'")
+                if "query_type" in final_result and final_result["query_type"]:
+                    details.append(f"type='{final_result['query_type']}'")
+                if "current_context" in final_result:
+                    ctx = final_result.get("current_context")
+                    if ctx:
+                        details.append(f"ctx_len={len(ctx)}")
+                    else:
+                        details.append("ctx=None")
+                if "remarks" in final_result and final_result["remarks"]:
+                    details.append(f"remarks='{final_result['remarks']}'")
+                if "messages" in final_result and final_result["messages"]:
+                    last_msg = final_result["messages"][-1]
+                    if hasattr(last_msg, "content"):
+                        msg_preview = str(last_msg.content).strip().replace('\n', ' ')
+                        preview = (msg_preview[:60] + "...") if len(msg_preview) > 60 else msg_preview
+                        details.append(f"output='{preview}'")
+
+            tokens_str = ""
+            if token_usage:
+                if isinstance(token_usage, dict):
+                    tokens_str = f" | Tokens: {token_usage.get('total_tokens', token_usage)}"
+                elif hasattr(token_usage, "total_tokens"):
+                    tokens_str = f" | Tokens: {token_usage.total_tokens}"
+
+            detail_str = f" | {', '.join(details)}" if details else ""
+            print(f"🟢 [Agent Trajectory] ✔ Completed Node: [{node_name}] in {duration}ms{detail_str}{tokens_str}")
+
         def process_result(result, start, start_iso):
             duration = int((time.time() - start) * 1000)
             token_usage = None
@@ -32,6 +71,8 @@ def observable_node(node_name):
 
             final_result = {k: v for k, v in result.items() if k != "trajectory"}
 
+            log_exit(final_result, duration, token_usage)
+
             trajectory_event = {
                 "node": node_name,
                 "start_time": start_iso,
@@ -49,6 +90,7 @@ def observable_node(node_name):
             
         def process_error(e, start, start_iso):
             duration = int((time.time() - start) * 1000)
+            print(f"🔴 [Agent Trajectory] ✖ Failed Node: [{node_name}] after {duration}ms | {type(e).__name__}: {e}")
             error_event = {
                 "node": node_name,
                 "start_time": start_iso,
@@ -71,6 +113,7 @@ def observable_node(node_name):
         if is_async:
             @wraps(func)
             async def async_wrapper(state, config):
+                log_entry(state)
                 start = time.time()
                 start_iso = datetime.now(timezone.utc).isoformat()
                 try:
@@ -82,6 +125,7 @@ def observable_node(node_name):
         else:
             @wraps(func)
             def sync_wrapper(state, config):
+                log_entry(state)
                 start = time.time()
                 start_iso = datetime.now(timezone.utc).isoformat()
                 try:
