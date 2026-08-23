@@ -1,0 +1,50 @@
+services:
+  # ─────────────────────────────────────────────────────────────
+  # Next.js Frontend
+  # ─────────────────────────────────────────────────────────────
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: foxnutts_client
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./client/.env 
+    depends_on:
+      - server
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────
+  # FastAPI Backend
+  # ─────────────────────────────────────────────────────────────
+  server:
+    build:
+      context: ./rag-backend/server
+      dockerfile: Dockerfile
+    container_name: foxnutts_server
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./rag-backend/server/.env
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────
+  # Celery Worker (same image as server, different command)
+  # ─────────────────────────────────────────────────────────────
+  celery:
+    build:
+      context: ./rag-backend/server
+      dockerfile: Dockerfile
+    container_name: foxnutts_celery
+    command: >
+      celery -A app.celery_app.celery_app worker
+        --loglevel=info
+        --concurrency=1
+        --without-gossip
+        --without-mingle
+    env_file:
+      - ./rag-backend/server/.env
+    depends_on:
+      - server
+    restart: unless-stopped

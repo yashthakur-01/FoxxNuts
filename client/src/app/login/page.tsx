@@ -104,33 +104,30 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex bg-[var(--fn-bg)]">
       {/* Left Side — Auth Form (40%) */}
+      <div className="absolute top-6 left-6 flex items-center justify-between gap-4">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--fn-text-secondary)] hover:text-[var(--fn-text)] px-2.5 py-1.5 rounded-[var(--fn-radius-sm)] border border-[var(--fn-border)] bg-[var(--fn-surface)] hover:bg-[var(--fn-elevated)] transition-all cursor-pointer group shadow-xs active:scale-95"
+          title="Return to Home"
+        >
+          <svg
+            className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+          </svg>
+          <span>Back to Home</span>
+        </Link>
+      </div>
       <div className="w-full lg:w-[40%] flex items-center justify-center px-6 py-12 lg:px-12">
         <div className="w-full max-w-sm space-y-6">
-          {/* Top Row: Back to Home button + ThemeToggle */}
-          <div className="flex items-center justify-between gap-4">
-            <Link
-              href="/"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--fn-text-secondary)] hover:text-[var(--fn-text)] px-2.5 py-1.5 rounded-[var(--fn-radius-sm)] border border-[var(--fn-border)] bg-[var(--fn-surface)] hover:bg-[var(--fn-elevated)] transition-all cursor-pointer group shadow-xs active:scale-95"
-              title="Return to Home"
-            >
-              <svg
-                className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-              </svg>
-              <span>Back to Home</span>
-            </Link>
-
-            <ThemeToggle className="hover:bg-[var(--fn-surface)] border border-[var(--fn-border)]" />
-          </div>
 
           {/* Logo with text */}
           <div>
-            <div className="flex items-center mb-5">
+            <div className="flex items-center mb-5 justify-between">
               <Link href="/" title="FoxxNuts Home">
                 <img
                   src="/light_with_text.png"
@@ -143,6 +140,7 @@ export default function LoginPage() {
                   className="h-10 sm:h-12 w-auto object-contain select-none block [.light_&]:hidden cursor-pointer"
                 />
               </Link>
+              <ThemeToggle className="hover:bg-[var(--fn-surface)] border border-[var(--fn-border)]" />
             </div>
 
             <h1 className="text-2xl font-semibold text-[var(--fn-text)] tracking-tight">

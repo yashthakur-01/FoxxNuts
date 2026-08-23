@@ -1,0 +1,37 @@
+# Virtual environments
+venv
+.venv
+__pycache__
+*.pyc
+*.pyo
+
+# Environment files (injected via docker-compose env_file)
+.env
+.env.*
+!.env.example
+
+# IDE / Editor
+.vscode
+.idea
+*.swp
+*.swo
+
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+AGENTS.md
+
+# Test / Setup scripts
+setup_test_data.py
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml

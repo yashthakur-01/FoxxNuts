@@ -1,0 +1,37 @@
+# ── Web Framework & Server ──────────────────────────────────────
+fastapi
+uvicorn[standard]
+pydantic
+
+# ── Task Queue ──────────────────────────────────────────────────
+celery[redis]
+
+# ── LangChain / LangGraph core ─────────────────────────────────
+langchain
+langchain-core
+langchain-community
+langchain-openai
+langchain-google-genai
+langchain-cohere
+langchain-classic
+langgraph
+
+# ── Vector DB & Sparse Encoding ─────────────────────────────────
+pinecone
+pinecone-text
+
+# ── Reranking (optional, only used when JINA_API_KEY is set) ────
+# langchain-community already bundles JinaRerank support
+
+# ── Cloud Storage (R2 / S3) ────────────────────────────────────
+boto3
+
+# ── Database ───────────────────────────────────────────────────
+supabase
+
+# ── Redis (direct, non-Celery usage) ──────────────────────────
+redis
+
+# ── Utilities ──────────────────────────────────────────────────
+python-dotenv
+python-multipart
