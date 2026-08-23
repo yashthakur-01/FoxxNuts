@@ -1,6 +1,10 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
+/**
+ * Server Component & Server Action Supabase Client
+ * Uses `next/headers` cookies store.
+ */
 export async function createServerSupabaseClient() {
   const cookieStore = await cookies()
 
@@ -18,8 +22,7 @@ export async function createServerSupabaseClient() {
               cookieStore.set(name, value, options)
             )
           } catch {
-            // setAll is called from Server Components where cookies cannot be set.
-            // This can be ignored when the middleware refreshes sessions.
+            // Ignored in Server Components where cookies cannot be directly mutated.
           }
         },
       },

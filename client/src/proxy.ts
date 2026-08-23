@@ -1,24 +1,43 @@
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
-import multer from "multer";
- 
-// This function can be marked `async` if using `await` inside
-export const proxy = async(request: NextRequest) => {
+import { NextResponse, type NextRequest } from 'next/server'
+import { createProxyClient } from './supabase/proxyClient'
 
-    const path = request.nextUrl.pathname;
+export async function proxy(request: NextRequest) {
+  const { supabase, response } = createProxyClient(request)
 
-    if(path.startsWith("/api/customer/uploadFile")){
+  // Refresh auth session if expired & get active user
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-        const storage = multer.memoryStorage();
+  const pathname = request.nextUrl.pathname
 
-        const upload = multer({
-            storage
-        });
+  // Protected routes: require active user session
+  const isProtectedRoute =
+    pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/onboarding') ||
+    pathname.startsWith('/chat')
 
-    }
+  if (!user && isProtectedRoute) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    return NextResponse.redirect(url)
+  }
 
+  // If already authenticated and visiting /login, redirect to /dashboard
+  if (user && pathname === '/login') {
+    const url = request.nextUrl.clone()
+    url.pathname = '/dashboard'
+    return NextResponse.redirect(url)
+  }
+
+  return response
 }
- 
+
 export const config = {
-    matcher: '/about/:path*',
+  matcher: [
+    '/dashboard/:path*',
+    '/onboarding/:path*',
+    '/chat/:path*',
+    '/login',
+  ],
 }

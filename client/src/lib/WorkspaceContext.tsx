@@ -52,15 +52,23 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   const refreshWorkspaces = useCallback(async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (!session || sessionError) {
         setLoading(false);
+        if (!pathname.startsWith('/login') && !pathname.startsWith('/embed')) {
+          router.replace('/login');
+        }
         return;
       }
 
       const res = await fetch('/api/customer/getWorkspaces', {
         headers: { 'Authorization': session.access_token },
       });
+
+      if (res.status === 401) {
+        router.replace('/login');
+        return;
+      }
 
       if (res.ok) {
         const data = await res.json();
@@ -91,7 +99,20 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     refreshWorkspaces();
-  }, [refreshWorkspaces]);
+
+    // Listen to real-time auth changes (signout, token expiry, session refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        if (!pathname.startsWith('/login') && !pathname.startsWith('/embed')) {
+          router.replace('/login');
+        }
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [refreshWorkspaces, supabase, router, pathname]);
 
   useEffect(() => {
     if (activeWorkspaceId) {
