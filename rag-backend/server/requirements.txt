@@ -35,3 +35,4 @@ redis
 # ── Utilities ──────────────────────────────────────────────────
 python-dotenv
 python-multipart
+pymupdf
