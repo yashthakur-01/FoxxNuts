@@ -84,8 +84,8 @@ async def add_process_time_header(request: Request, call_next):
 app.include_router(message_router)
 app.include_router(file_process_router)
 
-@app.get("/")
-def home():
+@app.get("/health")
+def health_check():
     return {
         "message": "API running",
         "status": "online"
