@@ -211,21 +211,21 @@ async def get_docs_from_file(key: str, chunk_size: int, chunk_overlap: int) -> l
         file_bytes = r2_object['Body'].read()
         print(f"  ✔ [R2 Ingestion] Downloaded {len(file_bytes)} bytes successfully.")
 
-        import tempfile
         filename = key.split("/")[-1]
-        temp_file_path = os.path.join(tempfile.gettempdir(), filename)
-        with open(temp_file_path, "wb") as f:
-            f.write(file_bytes)
-        
-        print(f"📄 [PDF Parsing] Extracting & chunking PDF: '{filename}' (chunk_size={chunk_size}, overlap={chunk_overlap})...")
-        docs = await asyncio.to_thread(
-            main, pdf_path=temp_file_path, chunk_size_tokens=chunk_size, chunk_overlap_tokens=chunk_overlap, pymupdf_pages_per_window=10
-        )
-        
-        if os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
+        is_md = filename.lower().endswith((".md", ".markdown"))
+        doc_type_label = "Markdown" if is_md else "PDF"
 
-        print(f"  ✔ [PDF Parsing] Generated {len(docs) if docs else 0} structured text chunks.")
+        print(f"📄 [{doc_type_label} Parsing] In-memory chunking for '{filename}' (chunk_size={chunk_size}, overlap={chunk_overlap})...")
+        docs = await asyncio.to_thread(
+            main,
+            file_input=file_bytes,
+            file_name=filename,
+            document_title=filename,
+            chunk_size_tokens=chunk_size,
+            chunk_overlap_tokens=chunk_overlap,
+            pymupdf_pages_per_window=10
+        )
+        print(f"  ✔ [{doc_type_label} Parsing] Generated {len(docs) if docs else 0} structured text chunks directly in memory.")
 
     except Exception as e:
         print(f"❌ [R2 / Parsing Error] Failed to process document '{key}': {e}")
@@ -242,17 +242,25 @@ async def generate_embeddings_for_file(file_name: str, chunk_size: int, chunk_ov
         if not docs:
             raise ValueError(f"No document chunks could be extracted for file '{file_name}'.")
         
+        is_md = file_name.lower().endswith((".md", ".markdown"))
+
         for item in docs:
             item.metadata["fileName"] = file_name
             item.metadata["customerId"] = customerId
             item.metadata["workspaceId"] = workspaceId
             
-            # Ensure file name & page are prepended to chunk text
-            if not item.page_content.startswith("["):
-                page_info = item.metadata.get("page_window") or item.metadata.get("page", 1)
-                item.page_content = f"[Page {page_info}] [File: {file_name}]\n{item.page_content}"
-            elif "[File:" not in item.page_content:
-                item.page_content = f"[File: {file_name}] {item.page_content}"
+            # Format chunk header (strict rule: NO page numbers for Markdown files)
+            if is_md:
+                if not item.page_content.startswith("["):
+                    item.page_content = f"[File: {file_name}]\n{item.page_content}"
+                elif "[File:" not in item.page_content:
+                    item.page_content = f"[File: {file_name}] {item.page_content}"
+            else:
+                if not item.page_content.startswith("["):
+                    page_info = item.metadata.get("page_window") or item.metadata.get("page", 1)
+                    item.page_content = f"[Page {page_info}] [File: {file_name}]\n{item.page_content}"
+                elif "[File:" not in item.page_content:
+                    item.page_content = f"[File: {file_name}] {item.page_content}"
         
         await store_docs(docs)
         print(f"✅ [Embedding Pipeline] Completed embedding pipeline for file: {file_name}")

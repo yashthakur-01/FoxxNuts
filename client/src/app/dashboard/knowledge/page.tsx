@@ -118,8 +118,12 @@ export default function KnowledgePage() {
     const validFiles: File[] = [];
 
     for (const file of selectedFiles) {
-      if (!file.name.toLowerCase().endsWith(".pdf")) {
-        toast.error(`"${file.name}" is not supported. Only PDF files are accepted.`);
+      const lowerName = file.name.toLowerCase();
+      const isPdf = lowerName.endsWith(".pdf");
+      const isMd = lowerName.endsWith(".md") || lowerName.endsWith(".markdown");
+
+      if (!isPdf && !isMd) {
+        toast.error(`"${file.name}" is not supported. Please upload a PDF or Markdown (.md) file.`);
       } else if (file.size > MAX_FILE_SIZE_BYTES) {
         const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
         toast.error(`"${file.name}" is ${sizeMB}MB. Maximum allowed file size is 10MB.`);
@@ -190,8 +194,16 @@ export default function KnowledgePage() {
         toast.info(`Uploaded ${file.name}. Indexing in background...`);
         await fetchFiles();
 
-        // Poll for processing completion
+        // Poll for processing completion (max 5 minutes)
+        let pollCount = 0;
+        const MAX_POLLS = 120;
         const pollInterval = setInterval(async () => {
+          pollCount++;
+          if (pollCount > MAX_POLLS) {
+            clearInterval(pollInterval);
+            return;
+          }
+
           const { data } = await supabase
             .from("files")
             .select("status")
@@ -378,7 +390,14 @@ export default function KnowledgePage() {
         </div>
       );
     }
-    if (ext === "txt" || ext === "md") {
+    if (ext === "md" || ext === "markdown") {
+      return (
+        <div className="w-8 h-8 rounded-[var(--fn-radius-sm)] bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold text-[10px]">
+          MD
+        </div>
+      );
+    }
+    if (ext === "txt") {
       return (
         <div className="w-8 h-8 rounded-[var(--fn-radius-sm)] bg-blue-500/10 text-blue-500 flex items-center justify-center font-bold text-[10px]">
           TXT

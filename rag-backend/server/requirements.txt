@@ -36,5 +36,4 @@ redis
 python-dotenv
 python-multipart
 PyMuPDF
-markitdown
 cohere

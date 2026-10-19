@@ -75,6 +75,15 @@ def process_document_task(self, file_name: str, chunk_size: int, chunk_overlap: 
             raise self.retry(exc=exc, countdown=10)
         else:
             print(f"⛔ [Celery Worker] Max retries ({self.max_retries}) exhausted for file: {file_name}")
+            print(f"🧹 [Celery Worker] Purging any partial chunks from vector DB for failed file: {file_name}...")
+            try:
+                deleted = asyncio.run(delete_vectors_for_file(file_name))
+                if deleted:
+                    print(f"✔ [Celery Worker] Successfully purged uncompleted/partial chunks from Pinecone for: {file_name}")
+            except Exception as cleanup_err:
+                print(f"⚠️ [Celery Worker] Failed to purge partial vectors for {file_name}: {cleanup_err}")
+
+            _update_file_status(file_name, "failed", f"Failed after {self.max_retries} retries: {exc}")
             raise exc
 
 
@@ -133,6 +142,16 @@ def reprocess_document_task(self, file_name: str, chunk_size: int, chunk_overlap
             print(f"🔄 [Celery Worker] Scheduling retry {self.request.retries + 1}/{self.max_retries} in 10s...")
             raise self.retry(exc=exc, countdown=10)
         else:
+            print(f"⛔ [Celery Worker] Max retries ({self.max_retries}) exhausted for reprocess file: {file_name}")
+            print(f"🧹 [Celery Worker] Purging any partial chunks from vector DB for failed reprocess: {file_name}...")
+            try:
+                deleted = asyncio.run(delete_vectors_for_file(file_name))
+                if deleted:
+                    print(f"✔ [Celery Worker] Successfully purged uncompleted chunks from Pinecone for: {file_name}")
+            except Exception as cleanup_err:
+                print(f"⚠️ [Celery Worker] Failed to purge partial vectors for {file_name}: {cleanup_err}")
+
+            _update_file_status(file_name, "failed", f"Reprocess failed after {self.max_retries} retries: {exc}")
             raise exc
 
 

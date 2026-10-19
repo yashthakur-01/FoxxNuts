@@ -165,32 +165,28 @@ export async function POST(request: NextRequest) {
         }
 
         // =========================================================================
-        // 4. SAVE HUMAN MESSAGE TO SUPABASE (Direct DB Write - No async background)
-        // =========================================================================
-        await supabase
-            .from("messages")
-            .insert({
-                session_id: session_id,
-                workspace_id: workspace_id,
-                sender_type: "human",
-                content: message,
-            });
-
-        // =========================================================================
-        // 4. FAQ RESPONSE CACHE CHECK (Exact Query Matching - Redis TTL: 3600s / 1h)
+        // 4. SAVE HUMAN MESSAGE & CHECK FAQ CACHE IN PARALLEL
         // =========================================================================
         const msgClean = message.trim().toLowerCase();
         const msgHash = Buffer.from(msgClean).toString("base64url");
         const faqCacheKey = `embed_faq_cache:${workspace_id}:${msgHash}`;
 
-        let cachedFaqAnswer: string | null = null;
-        if (redisClient) {
-            try {
-                cachedFaqAnswer = await redisClient.get<string>(faqCacheKey);
-            } catch (rErr) {
-                console.warn("[Redis Warning] Error reading FAQ cache:", rErr);
-            }
-        }
+        const [_, cachedFaqAnswer] = await Promise.all([
+            supabase
+                .from("messages")
+                .insert({
+                    session_id: session_id,
+                    workspace_id: workspace_id,
+                    sender_type: "human",
+                    content: message,
+                }),
+            redisClient
+                ? redisClient.get<string>(faqCacheKey).catch((rErr) => {
+                    console.warn("[Redis Warning] Error reading FAQ cache:", rErr);
+                    return null;
+                })
+                : Promise.resolve(null),
+        ]);
 
         // 🎯 FAQ CACHE HIT! Return cached answer directly without calling LLM
         if (cachedFaqAnswer) {

@@ -79,15 +79,20 @@ CREATE TABLE public.files (
 );
 
 -- Create Indexes for performance
-CREATE INDEX idx_workspace_cust_id ON public.workspace(cust_id);
-CREATE INDEX idx_messages_session_id ON public.messages(session_id);
-CREATE INDEX idx_messages_workspace_id ON public.messages(workspace_id);
-CREATE INDEX idx_messages_rating ON public.messages(rating);
-CREATE INDEX idx_agent_traces_session_id ON public.agent_traces(session_id);
-CREATE INDEX idx_agent_traces_workspace_id ON public.agent_traces(workspace_id);
-CREATE INDEX idx_files_workspace_id ON public.files(workspace_id);
-CREATE INDEX idx_files_file_id ON public.files(file_id);
-CREATE INDEX idx_files_status ON public.files(status);
+CREATE INDEX IF NOT EXISTS idx_workspace_cust_id ON public.workspace(cust_id);
+CREATE INDEX IF NOT EXISTS idx_messages_session_id ON public.messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_messages_workspace_id ON public.messages(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_messages_session_created ON public.messages(session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_workspace_session ON public.messages(workspace_id, session_id);
+CREATE INDEX IF NOT EXISTS idx_messages_rating ON public.messages(rating);
+CREATE INDEX IF NOT EXISTS idx_agent_traces_session_id ON public.agent_traces(session_id);
+CREATE INDEX IF NOT EXISTS idx_agent_traces_workspace_id ON public.agent_traces(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_agent_traces_workspace_created ON public.agent_traces(workspace_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_traces_session_created ON public.agent_traces(session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_files_workspace_id ON public.files(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_files_workspace_status ON public.files(workspace_id, status);
+CREATE INDEX IF NOT EXISTS idx_files_file_id ON public.files(file_id);
+CREATE INDEX IF NOT EXISTS idx_files_status ON public.files(status);
 
 -- ==========================================
 -- ROW LEVEL SECURITY (RLS) POLICIES

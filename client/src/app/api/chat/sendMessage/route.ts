@@ -62,38 +62,37 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // 2. Save the USER's message to the Supabase database
-        // Assuming you have a 'messages' table. 
-        const { error: insertError } = await supabase
-            .from("messages")
-            .insert({
-                session_id: session_id,
-                workspace_id: workspace_id, // Useful for analytics
-                sender_type: "human",
-                content: message
-            });
-
-        if (insertError) {
-            console.error("Failed to save user message to DB:", insertError);
-            // Even if saving to DB fails, we usually want to continue getting the AI response for the user
-        }
-
-        // 3. Forward the request to FastAPI to generate the RAG response
+        // 2. Save human message to Supabase & forward to FastAPI concurrently
+        // Auth validation and rate limits have already executed sequentially above
         const fastApiUrl = process.env.FASTAPI_URL || "http://127.0.0.1:8000";
-        
-        const fastApiResponse = await fetch(`${fastApiUrl}/api/chat`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": process.env.FASTAPI_SECRET_KEY || ""
-            },
-            body: JSON.stringify({
-                workspace_id: workspace_id,
-                customer_id: customer_id,
-                session_id: session_id,
-                message: message
+
+        const [insertResult, fastApiResponse] = await Promise.all([
+            supabase
+                .from("messages")
+                .insert({
+                    session_id: session_id,
+                    workspace_id: workspace_id,
+                    sender_type: "human",
+                    content: message
+                }),
+            fetch(`${fastApiUrl}/api/chat`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-API-Key": process.env.FASTAPI_SECRET_KEY || ""
+                },
+                body: JSON.stringify({
+                    workspace_id: workspace_id,
+                    customer_id: customer_id,
+                    session_id: session_id,
+                    message: message
+                })
             })
-        });
+        ]);
+
+        if (insertResult.error) {
+            console.error("Failed to save user message to DB:", insertResult.error);
+        }
 
         if (!fastApiResponse.ok) {
             console.error("FastAPI Error:", await fastApiResponse.text());

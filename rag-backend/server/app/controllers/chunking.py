@@ -56,89 +56,143 @@ class TextBlock(TypedDict):
     section_title: str
 
 
-def main(
-    pdf_path: str | Path,
+def chunk_markdown_file(
+    content: str,
     *,
+    document_title: str = "",
+    file_name: str = "",
+    chunk_size_tokens: int = 300,
+    chunk_overlap_tokens: int = 40,
+    chars_per_token: float = 4.2,
+) -> list[Document]:
+    """Parse and chunk a Markdown (.md) document directly in memory.
+
+    Preserves Markdown headings, tables, lists, and code blocks.
+    Strictly avoids adding page numbers to metadata or chunk headers.
+    """
+    max_chars = max(1, int(chunk_size_tokens * chars_per_token))
+    overlap_chars = max(0, int(chunk_overlap_tokens * chars_per_token))
+
+    cleaned = preprocess_markdown(content)
+    blocks = _markdown_blocks(cleaned)
+    title = document_title.strip() or file_name.strip()
+    chunk_pairs = _chunk_blocks_by_topic(
+        blocks,
+        document_title=title,
+        max_chars=max_chars,
+        overlap_chars=overlap_chars,
+    )
+
+    documents: list[Document] = []
+    total_chunks = len(chunk_pairs)
+
+    for chunk_index, (chunk_text, section_title) in enumerate(chunk_pairs, start=1):
+        header_parts = []
+        if title:
+            header_parts.append(f"[Document: {title}]")
+        if section_title:
+            header_parts.append(f"[Section: {section_title}]")
+
+        header_prefix = " ".join(header_parts)
+        content_with_metadata = f"{header_prefix}\n{chunk_text}" if header_prefix else chunk_text
+
+        # DO NOT add page numbers as metadata for markdown files
+        metadata = {
+            "source": file_name or title,
+            "document_title": title,
+            "section_title": section_title,
+            "chunk_index": chunk_index,
+            "total_chunks": total_chunks,
+            "parser": "markdown_native",
+            "file_type": "markdown",
+            "chunk_size_chars": len(content_with_metadata),
+            "chunk_size_tokens_estimate": max(1, round(len(content_with_metadata) / chars_per_token)),
+        }
+        documents.append(Document(page_content=content_with_metadata, metadata=metadata))
+
+    return documents
+
+
+def main(
+    file_input: str | Path | bytes | None = None,
+    *,
+    pdf_path: str | Path | None = None,
+    file_name: str = "",
     document_title: str = "",
     chunk_size_tokens: int = 300,
     chunk_overlap_tokens: int = 40,
     chars_per_token: float = 4.2,
-    markitdown_pages_per_batch: int = 30,
-    pymupdf_pages_per_window: int = 5,
+    pymupdf_pages_per_window: int = 10,
+    **kwargs,
 ) -> list[Document]:
-    """Return page-aware, topic-aware chunks as LangChain ``Document`` objects.
+    """Return structure-aware chunks as LangChain Document objects.
 
-    MarkItDown is tried first by converting temporary page-batch PDFs so page
-    ranges can still be preserved. If that output looks suspicious, the
-    fallback uses direct PyMuPDF page access with smaller page windows.
+    Directly parses in-memory bytes or file paths without disk writes:
+      - .md / .markdown: Native smart markdown chunking (preserves headings, tables, code, lists; no page numbers).
+      - .pdf: Pure in-memory PyMuPDF page-window streaming with page labels.
     """
+    input_data = file_input if file_input is not None else pdf_path
+    if input_data is None:
+        raise ValueError("Either file_input or pdf_path must be provided.")
 
     max_chars = max(1, int(chunk_size_tokens * chars_per_token))
     overlap_chars = max(0, int(chunk_overlap_tokens * chars_per_token))
 
-    temp_path = Path.cwd() / f".rag_pdf_{uuid.uuid4().hex}"
-    temp_path.mkdir(parents=True, exist_ok=False)
-    try:
-        source_path = _resolve_pdf_path(pdf_path)
-        title = document_title.strip() or _title_from_path(source_path) or source_path.stem
-        file_size = source_path.stat().st_size
-        page_count = _get_pdf_page_count(source_path)
+    name = file_name.strip()
+    if not name and isinstance(input_data, (str, Path)):
+        name = Path(input_data).name
+    title = document_title.strip() or (Path(input_data).stem if isinstance(input_data, (str, Path)) else name) or "Document"
 
-        try:
-            markdown_windows = _parse_page_batches_with_markitdown(
-                source_path,
-                temp_path,
-                pages_per_batch=markitdown_pages_per_batch,
-            )
-            markdown_text = "\n\n".join(window["text"] for window in markdown_windows)
-            markdown_report = assess_parse_quality(
-                markdown_text,
-                parser="markitdown",
-                file_size_bytes=file_size,
-                page_count=page_count,
-                markdown=True,
-            )
-            if not markdown_report["suspicious"]:
-                return _windows_to_documents(
-                    markdown_windows,
-                    source_path=source_path,
-                    document_title=title,
-                    parser_name="markitdown",
-                    markdown=True,
-                    max_chars=max_chars,
-                    overlap_chars=overlap_chars,
-                    quality_report=markdown_report,
-                    fallback_reason="",
-                )
-            fallback_reason = "; ".join(markdown_report["reasons"])
-        except Exception as exc:
-            fallback_reason = f"MarkItDown failed: {exc}"
+    # Route 1: Markdown (.md / .markdown)
+    if name.lower().endswith((".md", ".markdown")):
+        text_content = ""
+        if isinstance(input_data, (bytes, bytearray)):
+            text_content = input_data.decode("utf-8", errors="replace")
+        elif isinstance(input_data, (str, Path)) and Path(input_data).exists():
+            text_content = Path(input_data).read_text(encoding="utf-8", errors="replace")
+        elif isinstance(input_data, str):
+            text_content = input_data
 
-        plain_windows = _parse_page_windows_with_pymupdf(
-            source_path,
-            pages_per_window=pymupdf_pages_per_window,
-        )
-        plain_text = "\n\n".join(window["text"] for window in plain_windows)
-        report = assess_parse_quality(
-            plain_text,
-            parser="pymupdf",
-            file_size_bytes=file_size,
-            page_count=page_count,
-            markdown=False,
-        )
-        return _windows_to_documents(
-            plain_windows,
-            source_path=source_path,
+        return chunk_markdown_file(
+            content=text_content,
             document_title=title,
-            parser_name="pymupdf",
-            markdown=False,
-            max_chars=max_chars,
-            overlap_chars=overlap_chars,
-            quality_report=report,
-            fallback_reason=fallback_reason,
+            file_name=name,
+            chunk_size_tokens=chunk_size_tokens,
+            chunk_overlap_tokens=chunk_overlap_tokens,
+            chars_per_token=chars_per_token,
         )
-    finally:
-        shutil.rmtree(temp_path, ignore_errors=True)
+
+    # Route 2: PDF Document (100% in-memory via PyMuPDF)
+    plain_windows = _parse_page_windows_with_pymupdf(
+        input_data,
+        pages_per_window=pymupdf_pages_per_window,
+    )
+    if not plain_windows:
+        raise ValueError(f"No readable text could be extracted from PDF '{name}'.")
+
+    plain_text = "\n\n".join(window["text"] for window in plain_windows)
+    file_size = len(input_data) if isinstance(input_data, (bytes, bytearray)) else (Path(input_data).stat().st_size if Path(input_data).exists() else len(plain_text))
+    page_count = _get_pdf_page_count(input_data)
+
+    report = assess_parse_quality(
+        plain_text,
+        parser="pymupdf",
+        file_size_bytes=file_size,
+        page_count=page_count,
+        markdown=False,
+    )
+
+    return _windows_to_documents(
+        plain_windows,
+        source_name=name,
+        document_title=title,
+        parser_name="pymupdf",
+        markdown=False,
+        max_chars=max_chars,
+        overlap_chars=overlap_chars,
+        quality_report=report,
+        fallback_reason="",
+    )
 
 
 def assess_parse_quality(
@@ -226,7 +280,7 @@ def chunk_plain_text_by_structure(
 def _windows_to_documents(
     windows: list[PageWindowText],
     *,
-    source_path: Path,
+    source_name: str,
     document_title: str,
     parser_name: str,
     markdown: bool,
@@ -263,7 +317,7 @@ def _windows_to_documents(
             content_with_metadata = f"{header_prefix}\n{chunk_text}"
 
             metadata = {
-                "source": str(source_path),
+                "source": str(source_name),
                 "document_title": document_title,
                 "section_title": section_title,
                 "page": window["page_start"],
@@ -370,46 +424,19 @@ def _markdown_blocks(markdown: str) -> list[TextBlock]:
     ]
 
 
-def _resolve_pdf_path(pdf_path: str | Path) -> Path:
-    source = Path(pdf_path).expanduser().resolve()
-    if not source.exists():
-        raise FileNotFoundError(f"PDF not found: {source}")
-    if not source.is_file():
-        raise ValueError(f"Expected a file, got: {source}")
-    if source.suffix.lower() != ".pdf":
-        raise ValueError(f"Expected a PDF file, got: {source}")
-    return source
-
-
-def _parse_page_batches_with_markitdown(
-    pdf_path: Path,
-    temp_dir: Path,
-    *,
-    pages_per_batch: int,
-) -> list[PageWindowText]:
-    """Parse temporary page-batch PDFs with MarkItDown and keep page ranges."""
-
-    page_count = _require_pdf_page_count(pdf_path)
-    windows: list[PageWindowText] = []
-
-    for page_start, page_end in _iter_page_windows(page_count, pages_per_batch):
-        batch_pdf = _write_pdf_page_batch(pdf_path, temp_dir, page_start, page_end)
-        text = _parse_with_markitdown(batch_pdf).strip()
-        if text:
-            windows.append({"text": text, "page_start": page_start, "page_end": page_end})
-
-    if not windows:
-        raise ValueError("MarkItDown returned no text for all page batches")
-    return windows
-
-
 def _parse_page_windows_with_pymupdf(
-    pdf_path: Path,
+    doc_input: Path | bytes | str,
     *,
     pages_per_window: int,
 ) -> list[PageWindowText]:
+    """Extract page windows directly in memory using PyMuPDF without disk files."""
     windows: list[PageWindowText] = []
-    with pymupdf.open(str(pdf_path)) as document:
+    if isinstance(doc_input, (bytes, bytearray)):
+        doc_context = pymupdf.open(stream=doc_input, filetype="pdf")
+    else:
+        doc_context = pymupdf.open(str(doc_input))
+
+    with doc_context as document:
         for page_start, page_end in _iter_page_windows(document.page_count, pages_per_window):
             parts: list[str] = []
             for page_number in range(page_start, page_end + 1):
@@ -428,21 +455,6 @@ def _parse_page_windows_with_pymupdf(
     return windows
 
 
-def _write_pdf_page_batch(
-    pdf_path: Path,
-    temp_dir: Path,
-    page_start: int,
-    page_end: int,
-) -> Path:
-    """Write a temporary PDF containing one page batch for MarkItDown."""
-    output_path = temp_dir / f"{pdf_path.stem}_pages_{page_start}_{page_end}.pdf"
-    with pymupdf.open(str(pdf_path)) as source:
-        with pymupdf.open() as target:
-            target.insert_pdf(source, from_page=page_start - 1, to_page=page_end - 1)
-            output_path.write_bytes(target.tobytes())
-    return output_path
-
-
 def _iter_page_windows(page_count: int, pages_per_window: int) -> Iterable[tuple[int, int]]:
     window_size = max(1, pages_per_window)
     for page_start in range(1, page_count + 1, window_size):
@@ -450,38 +462,20 @@ def _iter_page_windows(page_count: int, pages_per_window: int) -> Iterable[tuple
         yield page_start, page_end
 
 
-def _get_pdf_page_count(pdf_path: Path) -> int | None:
+def _get_pdf_page_count(doc_input: Path | bytes | str) -> int | None:
     try:
-        with pymupdf.open(str(pdf_path)) as document:
-            return int(document.page_count)
+        if isinstance(doc_input, (bytes, bytearray)):
+            with pymupdf.open(stream=doc_input, filetype="pdf") as document:
+                return int(document.page_count)
+        else:
+            with pymupdf.open(str(doc_input)) as document:
+                return int(document.page_count)
     except Exception:
         return None
 
 
-def _require_pdf_page_count(pdf_path: Path) -> int:
-    page_count = _get_pdf_page_count(pdf_path)
-    if not page_count:
-        raise RuntimeError("Could not determine PDF page count")
-    return page_count
-
-
-def _parse_with_markitdown(pdf_path: Path) -> str:
-    try:
-        # pyrefly: ignore [missing-import]
-        from markitdown import MarkItDown
-    except ImportError as exc:
-        raise RuntimeError("Install markitdown to use the Markdown parser") from exc
-
-    converter = MarkItDown()
-    result = converter.convert(str(pdf_path))
-    text = getattr(result, "text_content", "")
-    if not text:
-        raise ValueError("MarkItDown returned empty text")
-    return str(text)
-
-
-def _title_from_path(pdf_path: Path) -> str:
-    name = pdf_path.stem
+def _title_from_path(source: Path | str) -> str:
+    name = Path(source).stem if not isinstance(source, bytes) else "Document"
     return re.sub(r"[-_]+", " ", name).strip().title()
 
 
@@ -664,31 +658,29 @@ def _print_documents_summary(documents: list[Document]) -> None:
     if fallback_reason:
         print(f"Fallback reason: {fallback_reason}")
     print(f"Documents/chunks: {len(documents)}")
-    if documents:
-        page_start = min(int(doc.metadata["page_start"]) for doc in documents)
-        page_end = max(int(doc.metadata["page_end"]) for doc in documents)
+    if documents and "page_start" in documents[0].metadata:
+        page_start = min(int(doc.metadata["page_start"]) for doc in documents if "page_start" in doc.metadata)
+        page_end = max(int(doc.metadata["page_end"]) for doc in documents if "page_end" in doc.metadata)
         print(f"Page range: {page_start}-{page_end}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Parse a local PDF file into LangChain Documents.")
-    parser.add_argument("pdf_path", help="Local PDF file path to ingest")
+    parser = argparse.ArgumentParser(description="Parse a local PDF or Markdown file into LangChain Documents.")
+    parser.add_argument("file_path", help="Local PDF or Markdown file path to ingest")
     parser.add_argument("--title", default="", help="Document title to add to chunk context")
     parser.add_argument("--chunk-size-tokens", type=int, default=300)
     parser.add_argument("--chunk-overlap-tokens", type=int, default=40)
     parser.add_argument("--chars-per-token", type=float, default=4.2)
-    parser.add_argument("--markitdown-pages-per-batch", type=int, default=30)
-    parser.add_argument("--pymupdf-pages-per-window", type=int, default=5)
+    parser.add_argument("--pymupdf-pages-per-window", type=int, default=10)
     parser.add_argument("--output", default="", help="Optional path to write chunks as text")
     args = parser.parse_args()
 
     docs = main(
-        args.pdf_path,
+        file_input=args.file_path,
         document_title=args.title,
         chunk_size_tokens=args.chunk_size_tokens,
         chunk_overlap_tokens=args.chunk_overlap_tokens,
         chars_per_token=args.chars_per_token,
-        markitdown_pages_per_batch=args.markitdown_pages_per_batch,
         pymupdf_pages_per_window=args.pymupdf_pages_per_window,
     )
     _print_documents_summary(docs)

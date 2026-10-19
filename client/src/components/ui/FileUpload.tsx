@@ -13,7 +13,7 @@ interface FileUploadProps {
 
 export default function FileUpload({
   onFilesSelected,
-  accept = '.pdf,application/pdf',
+  accept = '.pdf,application/pdf,.md,.markdown,text/markdown,text/plain',
   multiple = true,
   maxSizeMB = 10,
   disabled = false,
@@ -91,11 +91,11 @@ export default function FileUpload({
       </svg>
 
       <p className="text-sm font-medium text-[var(--fn-text)] mb-1">
-        {isDragging ? 'Drop PDF files here' : 'Drag PDF files here'}
+        {isDragging ? 'Drop PDF or Markdown files here' : 'Drag PDF or Markdown files here'}
       </p>
       <p className="text-xs text-[var(--fn-text-tertiary)] mb-3">or click to browse</p>
       <p className="text-[10px] text-[var(--fn-text-tertiary)]">
-        PDF documents only — Max {maxSizeMB}MB per file
+        PDF or Markdown documents — Max {maxSizeMB}MB per file
       </p>
     </div>
   );

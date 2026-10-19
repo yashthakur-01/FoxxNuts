@@ -27,8 +27,11 @@ async def handle_invalidate_cache(body: InvalidateCacheRequest):
 @router.post("/api/chat")
 async def return_message(body: MessageRequest):
     try:
-        # 1. Fetch AI config from Redis cache (fallback to Supabase)
-        workspace_data = await asyncio.to_thread(get_cached_workspace_config, body.workspace_id)
+        # 1. Fetch AI config and chat history concurrently from Redis/Supabase
+        workspace_data, cached_msgs = await asyncio.gather(
+            asyncio.to_thread(get_cached_workspace_config, body.workspace_id),
+            asyncio.to_thread(get_cached_chat_history, body.session_id, 8),
+        )
 
         temperature = workspace_data.get("temperature", 0.7)
         model_name = workspace_data.get("model_name", "openai/gpt-oss-120b")
@@ -49,9 +52,7 @@ async def return_message(body: MessageRequest):
             }
         }
         
-        # 4. Fetch chat history from Redis cache (fallback to Supabase)
-        cached_msgs = await asyncio.to_thread(get_cached_chat_history, body.session_id, 8)
-        
+        # 4. Format chat history (sequential step dependent on cached_msgs)
         formatted_history = []
         for msg in cached_msgs:
             sender = msg.get("sender_type")
@@ -64,7 +65,7 @@ async def return_message(body: MessageRequest):
             elif sender == "ai":
                 formatted_history.append(AIMessage(content=content))
 
-        # Append current incoming human query to Redis chat history cache
+        # Append current incoming human query to Redis chat history cache (sequential after reading)
         await asyncio.to_thread(append_chat_message_to_cache, body.session_id, "human", body.message)
 
         # 5. Setup initial state
@@ -129,7 +130,7 @@ async def return_message(body: MessageRequest):
                     if step.get("tokens") and isinstance(step["tokens"], dict):
                         total_tokens += step["tokens"].get("total_tokens", 0)
                         
-                # 7. Store the final AI response to the database & Redis cache
+                # 7. Store the final AI response & traces concurrently via asyncio.gather
                 def serialize_item(item):
                     if isinstance(item, dict):
                         return {k: serialize_item(v) for k, v in item.items()}
@@ -147,38 +148,43 @@ async def return_message(body: MessageRequest):
                 clean_query_context_pairs = serialize_item(query_context_pairs)
 
                 try:
-                    # Insert AI message to Supabase
-                    await asyncio.to_thread(
-                        lambda: supabase.table("messages").insert({
-                            "session_id": body.session_id,
-                            "sender_type": "ai",
-                            "content": full_response,
-                            "workspace_id": body.workspace_id
-                        }).execute()
-                    )
+                    write_tasks = [
+                        # 1. Insert AI message to Supabase
+                        asyncio.to_thread(
+                            lambda: supabase.table("messages").insert({
+                                "session_id": body.session_id,
+                                "sender_type": "ai",
+                                "content": full_response,
+                                "workspace_id": body.workspace_id
+                            }).execute()
+                        ),
+                        # 2. Append AI message to Redis chat history cache
+                        asyncio.to_thread(append_chat_message_to_cache, body.session_id, "ai", full_response),
+                        # 3. Insert agent trace to Supabase
+                        asyncio.to_thread(
+                            lambda: supabase.table("agent_traces").insert({
+                                "session_id": body.session_id,
+                                "workspace_id": body.workspace_id,
+                                "query": body.message,
+                                "final_response": full_response,
+                                "total_tokens": total_tokens,
+                                "total_duration_ms": total_duration_ms,
+                                "trajectory": clean_trajectory,
+                                "error_messages": clean_error_messages,
+                                "query_context_pairs": clean_query_context_pairs,
+                                "query_type": query_type
+                            }).execute()
+                        ),
+                        # 4. Invalidate observability cache for fresh analytics
+                        asyncio.to_thread(invalidate_observability_cache, body.workspace_id)
+                    ]
 
-                    # Append AI message to Redis chat history cache
-                    await asyncio.to_thread(append_chat_message_to_cache, body.session_id, "ai", full_response)
-                    
-                    # Insert agent trace to Supabase
-                    await asyncio.to_thread(
-                        lambda: supabase.table("agent_traces").insert({
-                            "session_id": body.session_id,
-                            "workspace_id": body.workspace_id,
-                            "query": body.message,
-                            "final_response": full_response,
-                            "total_tokens": total_tokens,
-                            "total_duration_ms": total_duration_ms,
-                            "trajectory": clean_trajectory,
-                            "error_messages": clean_error_messages,
-                            "query_context_pairs": clean_query_context_pairs,
-                            "query_type": query_type
-                        }).execute()
-                    )
-
-                    # Invalidate observability cache for fresh analytics
-                    await asyncio.to_thread(invalidate_observability_cache, body.workspace_id)
-                    print("[MessageRoute] AI response cached and observability cache invalidated successfully.")
+                    # Execute all independent database/cache writes in parallel
+                    write_results = await asyncio.gather(*write_tasks, return_exceptions=True)
+                    for idx, res in enumerate(write_results):
+                        if isinstance(res, Exception):
+                            print(f"[MessageRoute Warning] Post-message write task {idx} failed: {res}")
+                    print("[MessageRoute] AI response persisted and cached concurrently.")
                 except Exception as db_e:
                     print("Error saving message or traces to database/cache:", db_e)
             
