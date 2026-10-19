@@ -1,21 +1,12 @@
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel
 from dotenv import load_dotenv
 from supabase_client.client import supabase
 from app.controllers.agent_engine import get_chatbot_agent
 from langchain_core.messages import HumanMessage, AIMessage
 import asyncio
 
-load_dotenv()
-
-class MessageRequest(BaseModel):
-    workspace_id: str
-    customer_id: str
-    session_id: str
-    message: str
-
-router = APIRouter()
+from app.schemas import MessageRequest, InvalidateCacheRequest
 from app.helpers.cache import (
     get_cached_workspace_config,
     invalidate_workspace_cache,
@@ -24,8 +15,9 @@ from app.helpers.cache import (
     invalidate_observability_cache
 )
 
-class InvalidateCacheRequest(BaseModel):
-    workspace_id: str
+load_dotenv()
+
+router = APIRouter()
 
 @router.post("/api/invalidate-workspace-cache")
 async def handle_invalidate_cache(body: InvalidateCacheRequest):

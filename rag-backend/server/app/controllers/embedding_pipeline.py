@@ -20,7 +20,7 @@ from pinecone import Pinecone
 import time
 import os
 import asyncio
-from app.controllers.main import main
+from app.controllers.chunking import main
 # pyrefly: ignore [missing-import]
 from pinecone_text.sparse import BM25Encoder
 

@@ -1,23 +1,14 @@
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 from supabase_client.client import supabase
 import asyncio
 
+from app.schemas import ProcessDocument, DeleteWorkspace
 from app.tasks import process_document_task, reprocess_document_task, delete_document_task, delete_workspace_task
 from app.celery_app import celery_app
 from celery.result import AsyncResult
 
 from app.helpers.cache import get_cached_workspace_config
-
-class ProcessDocument(BaseModel):
-    workspace_id: str
-    customer_id: str
-    fileName: str    
-
-class DeleteWorkspace(BaseModel):
-    workspace_id: str
-    customer_id: str
 
 router = APIRouter()
 
