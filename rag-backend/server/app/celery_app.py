@@ -1,12 +1,27 @@
 import os
+import ssl
 from celery import Celery
 from celery.signals import worker_ready, worker_shutdown
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Redis URL configuration (defaults to localhost:6379/0)
-REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+def get_redis_url() -> str:
+    """
+    Resolves the Redis connection URI.
+    Automatically constructs standard rediss:// TLS connection from Upstash REST variables if REDIS_URL is not set.
+    """
+    if os.environ.get("REDIS_URL"):
+        return os.environ.get("REDIS_URL")
+    upstash_url = os.environ.get("UPSTASH_REDIS_REST_URL")
+    upstash_token = os.environ.get("UPSTASH_REDIS_REST_TOKEN")
+    if upstash_url and upstash_token:
+        host = upstash_url.replace("https://", "").replace("http://", "").strip("/")
+        return f"rediss://default:{upstash_token}@{host}:6379"
+    return "redis://localhost:6379/0"
+
+REDIS_URL = get_redis_url()
+is_ssl = REDIS_URL.startswith("rediss://")
 
 celery_app = Celery(
     "rag_tasks",
@@ -15,21 +30,30 @@ celery_app = Celery(
     include=["app.tasks"]
 )
 
-celery_app.conf.update(
-    task_serializer="json",
-    result_serializer="json",
-    accept_content=["json"],
-    timezone="UTC",
-    enable_utc=True,
-    task_track_started=True,
-    imports=["app.tasks"],
-)
+celery_config = {
+    "task_serializer": "json",
+    "result_serializer": "json",
+    "accept_content": ["json"],
+    "timezone": "UTC",
+    "enable_utc": True,
+    "task_track_started": True,
+    "imports": ["app.tasks"],
+}
+
+# Apply SSL configuration when connecting to Upstash / TLS-enabled Redis
+if is_ssl:
+    celery_config["broker_use_ssl"] = {"ssl_cert_reqs": ssl.CERT_REQUIRED}
+    celery_config["redis_backend_use_ssl"] = {"ssl_cert_reqs": ssl.CERT_REQUIRED}
+
+celery_app.conf.update(celery_config)
 
 @worker_ready.connect
 def on_worker_ready(**kwargs):
+    # Sanitize logged URL to avoid printing credentials in logs
+    sanitized_url = REDIS_URL.split("@")[-1] if "@" in REDIS_URL else REDIS_URL
     print("=" * 65)
     print("🟢 [Celery Worker] Worker initialized and ready!")
-    print(f"📦 [Celery Worker] Connected to Redis broker at: {REDIS_URL}")
+    print(f"📦 [Celery Worker] Connected to Redis broker at: ...@{sanitized_url}")
     print("⚡ [Celery Worker] Listening for background document ingestion & deletion tasks...")
     print("=" * 65)
 

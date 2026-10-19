@@ -1,6 +1,23 @@
 import Redis from "ioredis";
 
-const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379/0";
+/**
+ * Resolves the Redis connection URI from environment variables.
+ * Automatically constructs standard rediss:// TLS connection from Upstash REST variables if REDIS_URL is not provided.
+ */
+function getRedisUrl(): string {
+  if (process.env.REDIS_URL) {
+    return process.env.REDIS_URL;
+  }
+  const upstashUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (upstashUrl && upstashToken) {
+    const host = upstashUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    return `rediss://default:${upstashToken}@${host}:6379`;
+  }
+  return "redis://localhost:6379/0";
+}
+
+const REDIS_URL = getRedisUrl();
 
 let redisClient: Redis | null = null;
 
