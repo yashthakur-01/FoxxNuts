@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Iterable, Literal, TypedDict
 
 from langchain_core.documents import Document
+import pymupdf
 
 from app.controllers.pdf_parsing import preprocess_document
 from app.controllers.markdown_parsing import (
@@ -407,13 +408,8 @@ def _parse_page_windows_with_pymupdf(
     *,
     pages_per_window: int,
 ) -> list[PageWindowText]:
-    try:
-        import fitz
-    except ImportError as exc:
-        raise RuntimeError("Install PyMuPDF to use the fallback parser") from exc
-
     windows: list[PageWindowText] = []
-    with fitz.open(str(pdf_path)) as document:
+    with pymupdf.open(str(pdf_path)) as document:
         for page_start, page_end in _iter_page_windows(document.page_count, pages_per_window):
             parts: list[str] = []
             for page_number in range(page_start, page_end + 1):
@@ -439,15 +435,9 @@ def _write_pdf_page_batch(
     page_end: int,
 ) -> Path:
     """Write a temporary PDF containing one page batch for MarkItDown."""
-
-    try:
-        import fitz
-    except ImportError as exc:
-        raise RuntimeError("Install PyMuPDF to create MarkItDown page batches") from exc
-
     output_path = temp_dir / f"{pdf_path.stem}_pages_{page_start}_{page_end}.pdf"
-    with fitz.open(str(pdf_path)) as source:
-        with fitz.open() as target:
+    with pymupdf.open(str(pdf_path)) as source:
+        with pymupdf.open() as target:
             target.insert_pdf(source, from_page=page_start - 1, to_page=page_end - 1)
             output_path.write_bytes(target.tobytes())
     return output_path
@@ -462,12 +452,7 @@ def _iter_page_windows(page_count: int, pages_per_window: int) -> Iterable[tuple
 
 def _get_pdf_page_count(pdf_path: Path) -> int | None:
     try:
-        import fitz
-    except ImportError:
-        return None
-
-    try:
-        with fitz.open(str(pdf_path)) as document:
+        with pymupdf.open(str(pdf_path)) as document:
             return int(document.page_count)
     except Exception:
         return None

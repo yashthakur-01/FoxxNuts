@@ -49,6 +49,11 @@ celery_config = {
     "imports": ["app.tasks"],
 }
 
+celery_config["broker_transport_options"] = {
+    "polling_interval": 8,
+    "visibility_timeout": 3600,
+}
+
 # Apply SSL configuration when connecting to Upstash / TLS-enabled Redis
 if is_ssl:
     celery_config["broker_use_ssl"] = {"ssl_cert_reqs": ssl.CERT_REQUIRED}

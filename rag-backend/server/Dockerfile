@@ -20,7 +20,7 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Runtime libs needed by PyMuPDF (fitz)
+# Runtime libs needed by PyMuPDF
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libmupdf-dev libfreetype6 libharfbuzz0b \
         libjpeg62-turbo libopenjp2-7 && \

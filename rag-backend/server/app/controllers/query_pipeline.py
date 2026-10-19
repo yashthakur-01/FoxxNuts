@@ -4,55 +4,50 @@ from dotenv import load_dotenv
 import os
 import traceback
 
-from app.controllers.embedding_pipeline import get_vector_store
+from app.controllers.embedding_pipeline import query_pinecone_hybrid
 
 load_dotenv()
 
 async def fetch_context_from_vector_db(query: str, customerId: str, workspaceId: str, top_k: int = 5, similarity_threshold: float = 0.6) -> str:
-    
     t0 = time.time()
-    vc_retriever = get_vector_store(
-        top_k=top_k + 8, 
-        filter={"customerId": customerId, "workspaceId": workspaceId}
-    )
+    fetch_k = top_k + 8
+    filter_dict = {"customerId": customerId, "workspaceId": workspaceId}
     
-    jina_api_key = os.getenv("JINA_API_KEY")
+    print(f"  ↳ [Hybrid Search] Querying Pinecone directly for: '{query}'...")
+    try:
+        t_search = time.time()
+        raw_docs = await query_pinecone_hybrid(
+            query=query,
+            top_k=fetch_k,
+            filter=filter_dict
+        )
+        print(f"  ↳ [Hybrid Search] Retrieved {len(raw_docs)} docs directly from Pinecone in {time.time() - t_search:.2f}s")
+    except Exception as direct_err:
+        print(f"❌ [Vector Search Error] Direct Pinecone query failed: {direct_err}")
+        print(traceback.format_exc())
+        return ""
+
     relevant_docs = []
-    
-    if jina_api_key:
+    jina_api_key = os.getenv("JINA_API_KEY")
+
+    if jina_api_key and raw_docs:
         try:
             from langchain_community.document_compressors import JinaRerank
-            from langchain_classic.retrievers.contextual_compression import ContextualCompressionRetriever
             
             reranker = JinaRerank(
                 jina_api_key=jina_api_key, 
                 model="jina-reranker-v2-base-multilingual", 
                 top_n=top_k
             )
-            compression_retriever = ContextualCompressionRetriever(
-                base_compressor=reranker, 
-                base_retriever=vc_retriever
-            )
-            print(f"  ↳ [Hybrid Search] Querying Pinecone + Jina Reranker for: '{query}'...")
-            t_search = time.time()
-            relevant_docs = await compression_retriever.ainvoke(query)
-            print(f"  ↳ [Hybrid Search] Retrieved & reranked {len(relevant_docs)} docs in {time.time() - t_search:.2f}s")
+            print(f"  ↳ [Reranker] Reranking {len(raw_docs)} candidate chunks with Jina...")
+            t_rerank = time.time()
+            relevant_docs = await reranker.acompress_documents(documents=raw_docs, query=query)
+            print(f"  ↳ [Reranker] Jina reranked to {len(relevant_docs)} docs in {time.time() - t_rerank:.2f}s")
         except Exception as jina_err:
-            print(f"⚠️ [Jina Rerank Warning] Jina reranker failed ({jina_err}), falling back to direct Pinecone search...")
-            try:
-                relevant_docs = await vc_retriever.ainvoke(query)
-            except Exception as direct_err:
-                print(f"❌ [Vector Search Error] Direct Pinecone query failed: {direct_err}")
-                print(traceback.format_exc())
-                return ""
+            print(f"⚠️ [Jina Rerank Warning] Jina reranker failed ({jina_err}), using direct Pinecone ranking...")
+            relevant_docs = raw_docs[:top_k]
     else:
-        print(f"  ↳ [Hybrid Search] Querying Pinecone directly for: '{query}'...")
-        try:
-            relevant_docs = await vc_retriever.ainvoke(query)
-        except Exception as direct_err:
-            print(f"❌ [Vector Search Error] Direct Pinecone query failed: {direct_err}")
-            print(traceback.format_exc())
-            return ""
+        relevant_docs = raw_docs[:top_k]
     
     # Filter retrieved docs by similarity/relevance score threshold
     filtered_docs = []

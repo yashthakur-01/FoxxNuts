@@ -5,30 +5,21 @@ from langchain_core.documents import Document
 import boto3
 from typing import Any
 import traceback
-from langchain_community.retrievers import PineconeHybridSearchRetriever
-
-class CustomPineconeHybridSearchRetriever(PineconeHybridSearchRetriever):
-    filter_dict: dict | None = None
-    
-    def _get_relevant_documents(self, query: str, *, run_manager, **kwargs: Any):
-        if self.filter_dict:
-            kwargs["filter"] = self.filter_dict
-        return super()._get_relevant_documents(query, run_manager=run_manager, **kwargs)
-
-# pyrefly: ignore [missing-import]
-from pinecone import Pinecone
+import uuid
 import time
 import os
 import asyncio
-from app.controllers.chunking import main
-# pyrefly: ignore [missing-import]
+from pinecone import Pinecone
 from pinecone_text.sparse import BM25Encoder
+from pinecone_text.hybrid import hybrid_convex_scale
+from app.controllers.chunking import main
 
 load_dotenv()
 
-# Global cached singleton for BM25 and embeddings to avoid slow remote downloads on every call
+# Global cached singletons for Pinecone index, BM25, and embeddings
 _CACHED_BM25_ENCODER = None
 _CACHED_EMBEDDING_MODEL = None
+_CACHED_PINECONE_INDEX = None
 
 def get_embedding_model():
     global _CACHED_EMBEDDING_MODEL
@@ -51,7 +42,6 @@ def get_bm25_encoder():
     print("  [BM25 Init] Initializing BM25Encoder...")
     t0 = time.time()
     try:
-        # Try loading default params, or fallback to standard BM25Encoder if remote download hangs
         encoder = BM25Encoder().default()
         print(f"  [BM25 Init] BM25Encoder.default() loaded in {time.time() - t0:.2f}s")
     except Exception as bm25_err:
@@ -60,34 +50,87 @@ def get_bm25_encoder():
     _CACHED_BM25_ENCODER = encoder
     return _CACHED_BM25_ENCODER
 
-def get_vector_store(top_k: int = 5, filter: dict = None):
+def get_pinecone_index():
+    global _CACHED_PINECONE_INDEX
+    if _CACHED_PINECONE_INDEX is not None:
+        return _CACHED_PINECONE_INDEX
+        
     pinecone_api = os.environ.get("PINECONE_API_KEY")
     index_name = os.environ.get("PINECONE_INDEX")
     if not pinecone_api or not index_name:
         raise ValueError("PINECONE_API_KEY or PINECONE_INDEX environment variable is missing or empty.")
-    try: 
-        print(f"  [Vector Store Init] Connecting to Pinecone index '{index_name}'...")
-        t0 = time.time()
-        embedding = get_embedding_model() 
-        encoder = get_bm25_encoder()
-        
-        pc = Pinecone(api_key=pinecone_api)
-        index = pc.Index(index_name)
-        print(f"  [Vector Store Init] Pinecone index ready in {time.time() - t0:.2f}s")
-    except Exception as e:
-        print(f"❌ [Vector Store Init Error] Failed to initialize PineconeHybridSearchRetriever: {e}")
-        print(traceback.format_exc())
-        raise ValueError(f"Error occurred while initializing PineconeHybridSearchRetriever: {e}")
-        
-    return CustomPineconeHybridSearchRetriever(embeddings=embedding, sparse_encoder=encoder, index=index, top_k=top_k, filter_dict=filter)
+    
+    print(f"  [Vector Store Init] Connecting to Pinecone index '{index_name}' directly...")
+    t0 = time.time()
+    pc = Pinecone(api_key=pinecone_api)
+    _CACHED_PINECONE_INDEX = pc.Index(index_name)
+    print(f"  [Vector Store Init] Pinecone index ready in {time.time() - t0:.2f}s")
+    return _CACHED_PINECONE_INDEX
 
 
-async def store_docs(docs: list[Document]) -> None:
-    vc = get_vector_store()
+async def query_pinecone_hybrid(
+    query: str,
+    top_k: int = 5,
+    filter: dict | None = None,
+    alpha: float = 0.5,
+    namespace: str | None = None,
+) -> list[Document]:
+    """
+    Direct asynchronous Pinecone hybrid search (dense Cohere + sparse BM25).
+    Bypasses langchain-community wrapper completely.
+    """
+    embedding = get_embedding_model()
+    encoder = get_bm25_encoder()
+    index = get_pinecone_index()
+
+    # 1. Generate dense & sparse query vectors asynchronously in parallel
+    dense_future = asyncio.to_thread(embedding.embed_query, query)
+    sparse_future = asyncio.to_thread(encoder.encode_queries, query)
+    dense_vec, sparse_vec = await asyncio.gather(dense_future, sparse_future)
+
+    # 2. Scale alpha with hybrid_convex_scale
+    dense_vec, sparse_vec = hybrid_convex_scale(dense_vec, sparse_vec, alpha)
+    sparse_vec["values"] = [float(s) for s in sparse_vec["values"]]
+
+    # 3. Query Pinecone directly using asyncio
+    query_kwargs: dict[str, Any] = {
+        "vector": dense_vec,
+        "sparse_vector": sparse_vec,
+        "top_k": top_k,
+        "include_metadata": True,
+    }
+    if filter:
+        query_kwargs["filter"] = filter
+    if namespace:
+        query_kwargs["namespace"] = namespace
+
+    result = await asyncio.to_thread(index.query, **query_kwargs)
+
+    # 4. Convert Pinecone matches to LangChain Document instances
+    documents: list[Document] = []
+    for match in result.get("matches", []):
+        meta = match.get("metadata", {}).copy()
+        content = meta.pop("context", "")
+        if "score" not in meta:
+            meta["score"] = match.get("score", 0.0)
+        documents.append(Document(page_content=content, metadata=meta))
+
+    return documents
+
+
+async def store_docs(docs: list[Document], namespace: str | None = None) -> None:
+    """
+    Stores document chunks directly in Pinecone using asyncio and keyword-only index.upsert(vectors=...).
+    Computes dense embeddings (Cohere) and sparse encodings (BM25) directly without langchain-community.
+    """
+    index = get_pinecone_index()
+    embedding = get_embedding_model()
+    encoder = get_bm25_encoder()
+
     batch_size = int(os.environ.get("BATCH_SIZE", 80))
-    delay = float(os.environ.get("TIME_SLEEP", 30))
+    delay = float(os.environ.get("TIME_SLEEP", 8))
     total_batches = (len(docs) + batch_size - 1) // batch_size
-    print(f"📦 [Embedding Pipeline] Storing {len(docs)} document chunks in Pinecone across {total_batches} batch(es)...")
+    print(f"📦 [Embedding Pipeline] Storing {len(docs)} document chunks in Pinecone directly across {total_batches} batch(es)...")
 
     for i in range(0, len(docs), batch_size):
         batch = docs[i:i + batch_size]
@@ -96,9 +139,35 @@ async def store_docs(docs: list[Document]) -> None:
         texts = [doc.page_content for doc in batch]
         metadatas = [doc.metadata for doc in batch]
         
-        print(f"  ↳ [Batch {batch_num}/{total_batches}] Uploading {len(batch)} chunks (indices {i} to {i + len(batch) - 1})...")
+        print(f"  ↳ [Batch {batch_num}/{total_batches}] Generating dense + sparse vectors for {len(batch)} chunks (indices {i} to {i + len(batch) - 1})...")
+        
+        # Generate dense and sparse vectors asynchronously in parallel
+        dense_future = asyncio.to_thread(embedding.embed_documents, texts)
+        sparse_future = asyncio.to_thread(encoder.encode_documents, texts)
+        dense_embeds, sparse_embeds = await asyncio.gather(dense_future, sparse_future)
+
+        # Build Pinecone vector payload dictionaries
+        vectors = []
+        for text, meta, dense, sparse in zip(texts, metadatas, dense_embeds, sparse_embeds):
+            doc_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, text))
+            vector_meta = {"context": text, **meta}
+            vectors.append({
+                "id": doc_id,
+                "values": dense,
+                "sparse_values": {
+                    "indices": [int(idx) for idx in sparse["indices"]],
+                    "values": [float(val) for val in sparse["values"]],
+                },
+                "metadata": vector_meta,
+            })
+
+        upsert_kwargs: dict[str, Any] = {"vectors": vectors}
+        if namespace:
+            upsert_kwargs["namespace"] = namespace
+
+        print(f"  ↳ [Batch {batch_num}/{total_batches}] Upserting {len(vectors)} vectors to Pinecone directly...")
         try:
-            await asyncio.to_thread(vc.add_texts, texts=texts, metadatas=metadatas)
+            await asyncio.to_thread(index.upsert, **upsert_kwargs)
             print(f"  ✔ [Batch {batch_num}/{total_batches}] Successfully upserted to Pinecone.")
         except Exception as e:
             print(f"⚠️ [Batch {batch_num}/{total_batches}] First attempt failed: {e}")
@@ -106,7 +175,7 @@ async def store_docs(docs: list[Document]) -> None:
             await asyncio.sleep(10)
             
             try:
-                await asyncio.to_thread(vc.add_texts, texts=texts, metadatas=metadatas)
+                await asyncio.to_thread(index.upsert, **upsert_kwargs)
                 print(f"  ✔ [Batch {batch_num}/{total_batches}] Retry successful. Upserted to Pinecone.")
             except Exception as retry_e:
                 print(f"❌ [Batch {batch_num}/{total_batches}] FATAL: Retry failed for batch {batch_num}: {retry_e}")
@@ -197,16 +266,8 @@ async def generate_embeddings_for_file(file_name: str, chunk_size: int, chunk_ov
 
 async def delete_vectors_for_file(file_name: str) -> bool:
     """Delete all vectors from Pinecone that match the given fileName metadata."""
-    pinecone_api = os.environ.get("PINECONE_API_KEY")
-    index_name = os.environ.get("PINECONE_INDEX")
-    if not pinecone_api or not index_name:
-        raise ValueError("PINECONE_API_KEY or PINECONE_INDEX environment variable is missing.")
-    
     try:
-        pc = Pinecone(api_key=pinecone_api)
-        index = pc.Index(index_name)
-        
-        # List and delete vectors by metadata filter
+        index = get_pinecone_index()
         await asyncio.to_thread(
             index.delete,
             filter={"fileName": {"$eq": file_name}}
@@ -221,15 +282,8 @@ async def delete_vectors_for_file(file_name: str) -> bool:
 
 async def delete_vectors_for_workspace(workspace_id: str) -> bool:
     """Delete all vectors from Pinecone that match the given workspaceId metadata."""
-    pinecone_api = os.environ.get("PINECONE_API_KEY")
-    index_name = os.environ.get("PINECONE_INDEX")
-    if not pinecone_api or not index_name:
-        raise ValueError("PINECONE_API_KEY or PINECONE_INDEX environment variable is missing.")
-    
     try:
-        pc = Pinecone(api_key=pinecone_api)
-        index = pc.Index(index_name)
-        
+        index = get_pinecone_index()
         await asyncio.to_thread(
             index.delete,
             filter={"workspaceId": {"$eq": workspace_id}}
