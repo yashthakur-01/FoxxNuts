@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import supabase from "../../../../../supabase/adminClient";
 
+import { authenticateWorkspace } from "../../../../../lib/workspaceAuth";
+import type { GapItem } from "../../../../../types";
+
 export async function POST(request: NextRequest) {
-    const authHeader = request.headers.get("Authorization");
-    if (!authHeader) {
-        return NextResponse.json({ message: "Authorization header not found", success: false }, { status: 401 });
-    }
-
-    const { data: customer, error: customerError } = await supabase.auth.getUser(authHeader);
-    if (customerError || !customer?.user) {
-        return NextResponse.json({ message: `Authorization error occurred - ${customerError?.message}`, success: false }, { status: 401 });
-    }
-
     try {
         const body = await request.json();
         const { workspace_id, limit = 50 } = body;
@@ -23,15 +16,10 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Verify workspace ownership
-        const { data: workspaceOwner, error: checkError } = await supabase
-            .from("workspace")
-            .select("cust_id")
-            .eq("id", workspace_id)
-            .single();
-
-        if (checkError || workspaceOwner?.cust_id !== customer.user.id) {
-            return NextResponse.json({ message: "Unauthorized or workspace not found", success: false }, { status: 403 });
+        // Authenticate user and verify workspace ownership
+        const auth = await authenticateWorkspace(request, workspace_id);
+        if (auth.errorResponse) {
+            return auth.errorResponse;
         }
 
         // Fetch traces for workspace

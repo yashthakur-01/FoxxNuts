@@ -2,34 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import supabase from "../../../../supabase/adminClient";
 import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { r2 } from "../../../../cloudflare/client";
-import { getCachedUser } from "../../../../lib/authCache";
+import { authenticateWorkspace } from "../../../../lib/workspaceAuth";
 
 export async function DELETE(request: NextRequest) {
-    const authHeader = request.headers.get("Authorization");
-    const { user, error: customerError } = await getCachedUser(authHeader);
-    if (customerError || !user) {
-        return NextResponse.json({ message: `Authorization error occurred - ${customerError?.message}`, success: false }, { status: 401 });
-    }
-
-    const cust_id = user.id;
-
-    const body = await request.json();
-    const { file_id, workspace_id } = body;
-    if (!file_id || !workspace_id) {
-        return NextResponse.json({ message: "Missing required fields: file_id, workspace_id", success: false }, { status: 400 });
-    }
-
     try {
-        // Verify workspace ownership
-        const { data: workspaceOwner, error: checkError } = await supabase
-            .from("workspace")
-            .select("cust_id")
-            .eq("id", workspace_id)
-            .single();
-
-        if (checkError || workspaceOwner?.cust_id !== cust_id) {
-            return NextResponse.json({ message: "Unauthorized or workspace not found", success: false }, { status: 403 });
+        const body = await request.json();
+        const { file_id, workspace_id } = body;
+        if (!file_id || !workspace_id) {
+            return NextResponse.json({ message: "Missing required fields: file_id, workspace_id", success: false }, { status: 400 });
         }
+
+        // Authenticate user and verify workspace ownership
+        const auth = await authenticateWorkspace(request, workspace_id);
+        if (auth.errorResponse) {
+            return auth.errorResponse;
+        }
+
+        const cust_id = auth.user.id;
 
         const { data, error } = await supabase
             .from("files")

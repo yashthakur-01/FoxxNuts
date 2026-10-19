@@ -1,24 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import supabase from "../../../../supabase/adminClient";
-import { getCachedUser } from "../../../../lib/authCache";
+import { authenticateWorkspace } from "../../../../lib/workspaceAuth";
 
 export async function POST(request: NextRequest) {
-    // 1. Authenticate the user with session caching
-    const authHeader = request.headers.get("Authorization");
-    const { user, error: customerError } = await getCachedUser(authHeader);
-    if (customerError || !user) {
-        return NextResponse.json({ message: `Authorization error occurred - ${customerError?.message}`, success: false }, { status: 401 });
-    }
+    try {
+        // 1. Parse the configuration data
+        const body = await request.json();
+        const { workspace_id, ...configData } = body;
 
-    const cust_id = user.id;
+        if (!workspace_id) {
+            return NextResponse.json({ message: "Missing workspace_id", success: false }, { status: 400 });
+        }
 
-    // 2. Parse the configuration data
-    const body = await request.json();
-    const { workspace_id, ...configData } = body;
+        // 2. Authenticate user and verify workspace ownership
+        const auth = await authenticateWorkspace(request, workspace_id);
+        if (auth.errorResponse) {
+            return auth.errorResponse;
+        }
 
-    if (!workspace_id) {
-        return NextResponse.json({ message: "Missing workspace_id", success: false }, { status: 400 });
-    }
+        const cust_id = auth.user.id;
 
     // Security best practice: explicitly list allowed fields
     const allowedFields = [
@@ -52,19 +52,7 @@ export async function POST(request: NextRequest) {
         }
     }
 
-    try {
-        // 3. Verify workspace ownership
-        const { data: workspaceOwner, error: checkError } = await supabase
-            .from("workspace")
-            .select("cust_id")
-            .eq("id", workspace_id)
-            .single();
-
-        if (checkError || workspaceOwner?.cust_id !== cust_id) {
-            return NextResponse.json({ message: "Unauthorized or workspace not found", success: false }, { status: 403 });
-        }
-
-        // 4. Update workspace configuration in Supabase
+        // 3. Update workspace configuration in Supabase
         let { error: updateError } = await supabase
             .from("workspace")
             .update(updatePayload)

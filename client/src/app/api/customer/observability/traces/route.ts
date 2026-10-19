@@ -1,15 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import supabase from "../../../../../supabase/adminClient";
-import { getCachedUser } from "../../../../../lib/authCache";
+import { authenticateWorkspace } from "../../../../../lib/workspaceAuth";
 import redisClient from "../../../../../lib/redisClient";
 
 export async function POST(request: NextRequest) {
-    const authHeader = request.headers.get("Authorization");
-    const { user, error: customerError } = await getCachedUser(authHeader);
-    if (customerError || !user) {
-        return NextResponse.json({ message: `Authorization error occurred - ${customerError?.message}`, success: false }, { status: 401 });
-    }
-
     try {
         const body = await request.json();
         const { workspace_id, limit = 50, page = 1 } = body;
@@ -21,15 +15,10 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Verify workspace ownership
-        const { data: workspaceOwner, error: checkError } = await supabase
-            .from("workspace")
-            .select("cust_id")
-            .eq("id", workspace_id)
-            .single();
-
-        if (checkError || workspaceOwner?.cust_id !== user.id) {
-            return NextResponse.json({ message: "Unauthorized or workspace not found", success: false }, { status: 403 });
+        // Authenticate user and verify workspace ownership
+        const auth = await authenticateWorkspace(request, workspace_id);
+        if (auth.errorResponse) {
+            return auth.errorResponse;
         }
 
         const pageKey = `observability_traces:${workspace_id}:${page}:${limit}`;
@@ -97,12 +86,6 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-    const authHeader = request.headers.get("Authorization");
-    const { user, error: customerError } = await getCachedUser(authHeader);
-    if (customerError || !user) {
-        return NextResponse.json({ message: `Authorization error: ${customerError?.message || "Not authenticated"}`, success: false }, { status: 401 });
-    }
-
     try {
         const body = await request.json();
         const { workspace_id, session_id, trace_id } = body;
@@ -114,16 +97,10 @@ export async function DELETE(request: NextRequest) {
             );
         }
 
-        // Verify workspace ownership
-        const { data: ws, error: wsError } = await supabase
-            .from("workspace")
-            .select("id")
-            .eq("id", workspace_id)
-            .eq("cust_id", user.id)
-            .maybeSingle();
-
-        if (wsError || !ws) {
-            return NextResponse.json({ message: "Workspace not found or unauthorized", success: false }, { status: 403 });
+        // Authenticate user and verify workspace ownership
+        const auth = await authenticateWorkspace(request, workspace_id);
+        if (auth.errorResponse) {
+            return auth.errorResponse;
         }
 
         if (session_id) {

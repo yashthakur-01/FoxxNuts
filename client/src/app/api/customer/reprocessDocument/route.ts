@@ -1,16 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import supabase from "../../../../supabase/adminClient";
-import { getCachedUser } from "../../../../lib/authCache";
+import { authenticateWorkspace } from "../../../../lib/workspaceAuth";
 
 export async function POST(request: NextRequest) {
-    const authHeader = request.headers.get("Authorization");
-    const { user, error: customerError } = await getCachedUser(authHeader);
-    if (customerError || !user) {
-        return NextResponse.json({ message: `Authorization error occurred - ${customerError?.message}`, success: false }, { status: 401 });
-    }
-
-    const customer_id = user.id;
-
     try {
         const body = await request.json();
         const { workspace_id, fileName } = body;
@@ -22,16 +14,13 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // 1. Verify workspace ownership
-        const { data: workspaceOwner, error: checkError } = await supabase
-            .from("workspace")
-            .select("cust_id")
-            .eq("id", workspace_id)
-            .single();
-
-        if (checkError || workspaceOwner?.cust_id !== customer_id) {
-            return NextResponse.json({ message: "Unauthorized or workspace not found", success: false }, { status: 403 });
+        // Authenticate user and verify workspace ownership
+        const auth = await authenticateWorkspace(request, workspace_id);
+        if (auth.errorResponse) {
+            return auth.errorResponse;
         }
+
+        const customer_id = auth.user.id;
 
         // 2. Update file status to 'processing' (scoped to workspace)
         const { error: dbError } = await supabase

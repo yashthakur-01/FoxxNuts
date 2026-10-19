@@ -1,20 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import supabase from "../../../../supabase/adminClient";
-import { getCachedUser } from "../../../../lib/authCache";
+import { authenticateWorkspace } from "../../../../lib/workspaceAuth";
+import type { Workspace } from "../../../../types";
 
 export async function POST(request: NextRequest) {
-    const authHeader = request.headers.get("Authorization");
-    const { user, error: customerError } = await getCachedUser(authHeader);
-    if (customerError || !user) {
-        return NextResponse.json({ message: `Authorization error occurred - ${customerError?.message}`, success: false }, { status: 401 });
-    }
-
     try {
         const body = await request.json();
         const { workspace_id } = body;
 
         if (!workspace_id) {
             return NextResponse.json({ message: "Missing workspace_id", success: false }, { status: 400 });
+        }
+
+        // Authenticate user and verify workspace ownership
+        const auth = await authenticateWorkspace(request, workspace_id);
+        if (auth.errorResponse) {
+            return auth.errorResponse;
         }
 
         const { data: config, error } = await supabase
@@ -26,11 +27,6 @@ export async function POST(request: NextRequest) {
         if (error || !config) {
             console.error("Error fetching workspace config:", error);
             return NextResponse.json({ message: "Workspace not found", error: error?.message, success: false }, { status: 404 });
-        }
-
-        // Verify workspace ownership
-        if (config.cust_id !== user.id) {
-            return NextResponse.json({ message: "Unauthorized or workspace not found", success: false }, { status: 403 });
         }
 
         // Mask sensitive API key if set to avoid leaking secrets
