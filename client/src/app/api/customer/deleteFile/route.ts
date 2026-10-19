@@ -12,20 +12,37 @@ export async function DELETE(request: NextRequest) {
     }
 
     const cust_id = user.id;
-    
+
     const body = await request.json();
-    const {file_id, workspace_id} = body;
-    
+    const { file_id, workspace_id } = body;
+    if (!file_id || !workspace_id) {
+        return NextResponse.json({ message: "Missing required fields: file_id, workspace_id", success: false }, { status: 400 });
+    }
 
+    try {
+        // Verify workspace ownership
+        const { data: workspaceOwner, error: checkError } = await supabase
+            .from("workspace")
+            .select("cust_id")
+            .eq("id", workspace_id)
+            .single();
 
-    try{
-        const {data,error} = await supabase.from("files").delete().eq("file_id",file_id).select("file_path");
-        if(error){
-            return NextResponse.json({message: `Failed to delete file from database - ${error.message}`,success: false},{status:500});
+        if (checkError || workspaceOwner?.cust_id !== cust_id) {
+            return NextResponse.json({ message: "Unauthorized or workspace not found", success: false }, { status: 403 });
         }
 
-        if(!data?.[0].file_path){
-            return NextResponse.json({message: "File not found",success: false},{status:500});
+        const { data, error } = await supabase
+            .from("files")
+            .delete()
+            .eq("file_id", file_id)
+            .eq("workspace_id", workspace_id)
+            .select("file_path");
+        if (error) {
+            return NextResponse.json({ message: `Failed to delete file from database - ${error.message}`, success: false }, { status: 500 });
+        }
+
+        if (!data?.[0]?.file_path) {
+            return NextResponse.json({ message: "File not found or does not belong to this workspace", success: false }, { status: 404 });
         }
 
         const command = new DeleteObjectCommand({
@@ -35,11 +52,11 @@ export async function DELETE(request: NextRequest) {
         const result = await r2.send(command);
 
         if (result.$metadata.httpStatusCode !== 204) {
-            return NextResponse.json({message: "Failed to delete file from R2 bucket",success: false},{status:500});
+            return NextResponse.json({ message: "Failed to delete file from R2 bucket", success: false }, { status: 500 });
         }
 
         const fastApiUrl = process.env.FASTAPI_URL || "http://127.0.0.1:8000";
-            
+
         const response = await fetch(`${fastApiUrl}/api/delete-document`, {
             method: "DELETE",
             headers: {
@@ -53,15 +70,15 @@ export async function DELETE(request: NextRequest) {
             })
         });
 
-        if(!response.ok){
-            return NextResponse.json({message: "Failed to delete vectors from database for file_id",success: false},{status:500});
+        if (!response.ok) {
+            return NextResponse.json({ message: "Failed to delete vectors from database for file_id", success: false }, { status: 500 });
         }
 
-        return NextResponse.json({message: "File deleted successfully",success: true},{status:200});
+        return NextResponse.json({ message: "File deleted successfully", success: true }, { status: 200 });
 
 
-    }catch(error){
-        return NextResponse.json({message: `Server Error Occured - ${error}`},{status:500});
+    } catch (error) {
+        return NextResponse.json({ message: `Server Error Occured - ${error}` }, { status: 500 });
     }
 
 

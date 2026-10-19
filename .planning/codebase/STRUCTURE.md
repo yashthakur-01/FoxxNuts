@@ -104,11 +104,11 @@ cb/
 - Purpose: Core intelligence, document parsing, and vector retrieval pipelines.
 - Key files:
   - `agent_engine.py`: Multi-node LangGraph state machine orchestrating RAG queries and evaluation.
-  - `0_pdf_parsing.py`: PyMuPDF text cleaning, whitespace normalization, and heading detection.
-  - `0_markdown_parsing.py`: Markdown heading parsing and structural block splitting.
+  - `pdf_parsing.py`: PyMuPDF text cleaning, whitespace normalization, and heading detection.
+  - `markdown_parsing.py`: Markdown heading parsing and structural block splitting.
   - `main.py`: Page-window document chunking attaching structured metadata headers.
-  - `1_embedding_pipeline.py`: Cohere embedding generation, BM25 encoding, and Pinecone upsert/delete.
-  - `2_query_pipeline.py`: Pinecone hybrid vector search and optional Jina neural reranking.
+  - `embedding_pipeline.py`: Cohere embedding generation, BM25 encoding, and Pinecone upsert/delete.
+  - `query_pipeline.py`: Pinecone hybrid vector search and optional Jina neural reranking.
 
 **`rag-backend/server/app/routes/`:**
 - Purpose: FastAPI HTTP route definitions.

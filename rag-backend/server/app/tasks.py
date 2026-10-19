@@ -1,11 +1,15 @@
 import asyncio
-import importlib
 import os
 import boto3
 import traceback
 from app.celery_app import celery_app
 from supabase_client.client import supabase
 from datetime import datetime, timezone
+from app.controllers.embedding_pipeline import (
+    generate_embeddings_for_file,
+    delete_vectors_for_file,
+    delete_vectors_for_workspace,
+)
 
 def _update_file_status(file_name: str, status: str, error_msg: str = None):
     """Helper to update file status and updated_at in Supabase."""
@@ -34,10 +38,6 @@ def process_document_task(self, file_name: str, chunk_size: int, chunk_overlap: 
     print("=" * 70)
     
     try:
-        # Dynamically import embedding pipeline
-        embedding_pipeline = importlib.import_module("app.controllers.1_embedding_pipeline")
-        generate_embeddings_for_file = embedding_pipeline.generate_embeddings_for_file
-
         # Run async embedding function inside synchronous Celery worker thread
         asyncio.run(
             generate_embeddings_for_file(
@@ -90,10 +90,6 @@ def reprocess_document_task(self, file_name: str, chunk_size: int, chunk_overlap
     print("=" * 70)
     
     try:
-        embedding_pipeline = importlib.import_module("app.controllers.1_embedding_pipeline")
-        delete_vectors_for_file = embedding_pipeline.delete_vectors_for_file
-        generate_embeddings_for_file = embedding_pipeline.generate_embeddings_for_file
-
         # Step 1: Delete old embeddings from Pinecone
         print(f"🗑️ [Celery Worker] Deleting old Pinecone vectors for file: {file_name}")
         deleted = asyncio.run(delete_vectors_for_file(file_name))
@@ -149,9 +145,6 @@ def delete_document_task(self, file_name: str, customer_id: str, workspace_id: s
     print(f"🗑️ [Celery Worker] DELETE TASK STARTED | File: {file_name} (Workspace: {workspace_id})")
     print("=" * 70)
     try:
-        embedding_pipeline = importlib.import_module("app.controllers.1_embedding_pipeline")
-        delete_vectors_for_file = embedding_pipeline.delete_vectors_for_file
-
         deleted = asyncio.run(delete_vectors_for_file(file_name))
         if deleted:
             print(f"✅ [Celery Worker] Successfully deleted all vectors for file: {file_name}")
@@ -213,10 +206,6 @@ def delete_workspace_task(self, customer_id: str, workspace_id: str):
                 aws_access_key_id=access_key_id,
                 aws_secret_access_key=secret_access_key
             )
-
-        embedding_pipeline = importlib.import_module("app.controllers.1_embedding_pipeline")
-        delete_vectors_for_file = embedding_pipeline.delete_vectors_for_file
-        delete_vectors_for_workspace = getattr(embedding_pipeline, "delete_vectors_for_workspace", None)
 
         # Step 2: Delete files one by one (R2 -> Pinecone -> Supabase file row)
         for idx, file_item in enumerate(files, start=1):

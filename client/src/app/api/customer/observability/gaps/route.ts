@@ -23,6 +23,17 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Verify workspace ownership
+        const { data: workspaceOwner, error: checkError } = await supabase
+            .from("workspace")
+            .select("cust_id")
+            .eq("id", workspace_id)
+            .single();
+
+        if (checkError || workspaceOwner?.cust_id !== customer.user.id) {
+            return NextResponse.json({ message: "Unauthorized or workspace not found", success: false }, { status: 403 });
+        }
+
         // Fetch traces for workspace
         const { data: traces, error } = await supabase
             .from("agent_traces")

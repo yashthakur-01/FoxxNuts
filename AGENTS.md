@@ -40,9 +40,10 @@ e:\cb\
         ├── celery_app.py                    # Celery Worker Configuration & Redis Broker Init
         ├── tasks.py                         # Celery Tasks (process_document, reprocess_document, delete_document)
         ├── controllers\
-        │   ├── 0_pdf_parsing.py             # PyMuPDF / PDF Plumber extraction logic
-        │   ├── 1_embedding_pipeline.py      # Chunking with page headers, Cohere embeddings, Pinecone upsert
-        │   ├── 2_query_pipeline.py          # Vector similarity search & metadata filtering
+        │   ├── pdf_parsing.py               # PyMuPDF / PDF Plumber extraction logic
+        │   ├── markdown_parsing.py          # Markdown structure & heading parsing
+        │   ├── embedding_pipeline.py        # Chunking with page headers, Cohere embeddings, Pinecone upsert
+        │   ├── query_pipeline.py            # Vector similarity search & metadata filtering
         │   └── agent_engine.py              # LangGraph Workflow Definition & Node Trajectories
         ├── helpers\
         │   └── cache.py                     # Redis Cache Helpers & Set Tracker Invalidation

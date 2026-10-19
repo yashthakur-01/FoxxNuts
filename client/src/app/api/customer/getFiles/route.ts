@@ -20,6 +20,17 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Verify workspace ownership
+        const { data: workspaceOwner, error: checkError } = await supabase
+            .from("workspace")
+            .select("cust_id")
+            .eq("id", workspace_id)
+            .single();
+
+        if (checkError || workspaceOwner?.cust_id !== user.id) {
+            return NextResponse.json({ message: "Unauthorized or workspace not found", success: false }, { status: 403 });
+        }
+
         const { data: files, error } = await supabase
             .from("files")
             .select("file_id, file_name, status, created_at")

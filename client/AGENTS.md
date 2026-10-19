@@ -19,13 +19,13 @@ This project is a multi-tenant Retrieval-Augmented Generation (RAG) chatbot syst
 ### Backend Architecture (`rag-backend/server`)
 The backend is a FastAPI application orchestrating the entire RAG pipeline.
 1. **Document Processing (`/api/process-document`)**: 
-   - Files are parsed using specific pipelines (`0_markdown_parsing.py`, `0_pdf_parsing.py`).
-   - Text is chunked and embedded using the embedding pipeline (`1_embedding_pipeline.py`) into Pinecone.
+   - Files are parsed using specific pipelines (`markdown_parsing.py`, `pdf_parsing.py`).
+   - Text is chunked and embedded using the embedding pipeline (`embedding_pipeline.py`) into Pinecone.
 2. **Chatbot Agent Engine (`agent_engine.py`)**: 
    - Implemented as a highly complex **LangGraph** state machine.
    - **Nodes included**: 
      - `genuine_generic_router`: Classifies if the query needs retrieval or is generic/repetitive.
-     - `context_retriever`: Fetches relevant context from Pinecone vector DB (`2_query_pipeline.py`).
+     - `context_retriever`: Fetches relevant context from Pinecone vector DB (`query_pipeline.py`).
      - `chatbot_node`: The main LLM node (supports Gemini, OpenAI, Groq) generating a grounded response.
      - `evaluator_node`: A judge LLM that evaluates the response's quality. Routes to `satisfactory`, `unsatisfactory`, `query_rephrase`, `revise`, or `clarify`.
      - `query_rephraser_node`: Re-writes the user's query if the evaluation fails, looping back to retrieval.

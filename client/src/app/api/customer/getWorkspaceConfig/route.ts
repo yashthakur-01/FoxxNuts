@@ -23,9 +23,22 @@ export async function POST(request: NextRequest) {
             .eq("id", workspace_id)
             .single();
 
-        if (error) {
+        if (error || !config) {
             console.error("Error fetching workspace config:", error);
-            return NextResponse.json({ message: "Failed to fetch workspace config", error: error.message, success: false }, { status: 500 });
+            return NextResponse.json({ message: "Workspace not found", error: error?.message, success: false }, { status: 404 });
+        }
+
+        // Verify workspace ownership
+        if (config.cust_id !== user.id) {
+            return NextResponse.json({ message: "Unauthorized or workspace not found", success: false }, { status: 403 });
+        }
+
+        // Mask sensitive API key if set to avoid leaking secrets
+        if (config.llm_api_key) {
+            config.has_custom_api_key = true;
+            config.llm_api_key = "••••••••";
+        } else {
+            config.has_custom_api_key = false;
         }
 
         return NextResponse.json({ config, success: true });

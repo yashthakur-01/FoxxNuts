@@ -4,12 +4,11 @@ from dotenv import load_dotenv
 import os
 import traceback
 
+from app.controllers.embedding_pipeline import get_vector_store
+
 load_dotenv()
 
 async def fetch_context_from_vector_db(query: str, customerId: str, workspaceId: str, top_k: int = 5, similarity_threshold: float = 0.6) -> str:
-    import importlib
-    embedding_pipeline = importlib.import_module("app.controllers.1_embedding_pipeline")
-    get_vector_store = embedding_pipeline.get_vector_store
     
     t0 = time.time()
     vc_retriever = get_vector_store(

@@ -22,11 +22,23 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // 1. Update file status to 'processing'
+        // 1. Verify workspace ownership
+        const { data: workspaceOwner, error: checkError } = await supabase
+            .from("workspace")
+            .select("cust_id")
+            .eq("id", workspace_id)
+            .single();
+
+        if (checkError || workspaceOwner?.cust_id !== customer_id) {
+            return NextResponse.json({ message: "Unauthorized or workspace not found", success: false }, { status: 403 });
+        }
+
+        // 2. Update file status to 'processing' (scoped to workspace)
         const { error: dbError } = await supabase
             .from("files")
             .update({ status: "processing", updated_at: new Date().toISOString() })
-            .eq("file_id", fileName);
+            .eq("file_id", fileName)
+            .eq("workspace_id", workspace_id);
 
         if (dbError) {
             console.error("Failed to update file status:", dbError);

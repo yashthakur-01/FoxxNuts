@@ -17,10 +17,21 @@ export async function POST(request: NextRequest) {
 
         const authHeader = request.headers.get("Authorization");
         const { user, error: authError } = await getCachedUser(authHeader);
-        let customer_id = user?.id || body.customer_id;
 
-        if (!customer_id) {
-            return NextResponse.json({ message: `Unauthorized or missing customer ID: ${authError?.message}` }, { status: 401 });
+        if (!user) {
+            return NextResponse.json({ message: `Unauthorized: ${authError?.message || "Invalid or missing token"}` }, { status: 401 });
+        }
+        const customer_id = user.id;
+
+        // Verify workspace ownership
+        const { data: workspaceOwner, error: checkError } = await supabase
+            .from("workspace")
+            .select("cust_id")
+            .eq("id", workspace_id)
+            .single();
+
+        if (checkError || workspaceOwner?.cust_id !== customer_id) {
+            return NextResponse.json({ message: "Unauthorized or workspace not found", success: false }, { status: 403 });
         }
 
         // =========================================================================

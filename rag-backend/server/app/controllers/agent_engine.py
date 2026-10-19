@@ -16,7 +16,7 @@ import os
 import operator
 import time
 import asyncio
-from app.helper.obseravable_node import observable_node
+from app.helpers.observable_node import observable_node
 
 
 
@@ -174,10 +174,7 @@ Output JSON: {"route": "generic_or_repetitive"} or {"route": "genuine_query"}"""
 
 @observable_node("context_retriver")
 async def retrieve_context(state:AgentState, config: RunnableConfig):
-
-    import importlib
-    query_pipeline = importlib.import_module("app.controllers.2_query_pipeline")
-    fetch_context_from_vector_db = query_pipeline.fetch_context_from_vector_db
+    from app.controllers.query_pipeline import fetch_context_from_vector_db
     query=state["query"][-1]
     configurable = config.get("configurable", {})
     customerId = configurable.get("customerId", "")

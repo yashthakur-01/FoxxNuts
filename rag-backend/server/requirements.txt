@@ -32,7 +32,9 @@ supabase
 # ── Redis (direct, non-Celery usage) ──────────────────────────
 redis
 
-# ── Utilities ──────────────────────────────────────────────────
+# ── Utilities & Parsing ────────────────────────────────────────
 python-dotenv
 python-multipart
 PyMuPDF
+markitdown
+cohere
