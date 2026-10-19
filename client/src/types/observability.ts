@@ -40,6 +40,7 @@ export interface QueryContextPair {
 }
 
 export interface TrajectoryStep {
+  node?: string;
   node_name?: string;
   name?: string;
   duration_ms?: number;
@@ -86,3 +87,10 @@ export interface SessionGroup {
   messageCount: number;
   hasGap: boolean;
 }
+
+export interface ObservabilitySectionProps {
+  workspaceId: string;
+  activeTabProp?: "metrics" | "traces" | "gaps";
+  hideTabHeader?: boolean;
+}
+
