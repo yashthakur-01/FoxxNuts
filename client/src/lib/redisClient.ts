@@ -1,36 +1,29 @@
-import Redis from "ioredis";
+import { Redis } from "@upstash/redis";
 
 /**
- * Resolves the Redis connection URI from environment variables.
- * Automatically constructs standard rediss:// TLS connection from Upstash REST variables if REDIS_URL is not provided.
+ * Initializes and exports the Upstash Redis REST client instance.
+ * Exclusively reads UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN from environment variables.
  */
-function getRedisUrl(): string {
-  if (process.env.REDIS_URL) {
-    return process.env.REDIS_URL;
-  }
-  const upstashUrl = process.env.UPSTASH_REDIS_REST_URL;
-  const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (upstashUrl && upstashToken) {
-    const host = upstashUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
-    return `rediss://default:${upstashToken}@${host}:6379`;
-  }
-  return "redis://localhost:6379/0";
-}
-
-const REDIS_URL = getRedisUrl();
+const url = process.env.UPSTASH_REDIS_REST_URL;
+const token = process.env.UPSTASH_REDIS_REST_TOKEN;
 
 let redisClient: Redis | null = null;
 
-try {
-  redisClient = new Redis(REDIS_URL, {
-    maxRetriesPerRequest: 1,
-    lazyConnect: true,
-  });
-  redisClient.connect().catch((err) => {
-    console.warn("[Next.js Redis Warning] Could not connect to Redis:", err.message);
-  });
-} catch (e) {
-  console.warn("[Next.js Redis Warning] ioredis initialization error:", e);
+if (url && token) {
+  try {
+    redisClient = new Redis({
+      url,
+      token,
+      automaticDeserialization: false,
+    });
+  } catch (err) {
+    console.warn("[Next.js Redis Warning] Failed to initialize @upstash/redis client:", err);
+  }
+} else {
+  console.warn(
+    "[Next.js Redis Warning] Missing UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN environment variables."
+  );
 }
 
 export default redisClient;
+

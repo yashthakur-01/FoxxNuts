@@ -14,6 +14,7 @@
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.110.0",
     "@types/ioredis": "^4.28.10",
+    "@upstash/redis": "^1.39.0",
     "dotenv": "^17.4.2",
     "ioredis": "^6.0.0",
     "multer": "^2.2.0",

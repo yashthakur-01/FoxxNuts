@@ -27,10 +27,11 @@ export async function POST(request: NextRequest) {
         // 1. Check Redis Cache
         if (redisClient) {
             try {
-                const cachedTraces = await redisClient.get(pageKey);
+                const cachedTraces = await redisClient.get<string>(pageKey);
                 if (cachedTraces) {
                     console.log(`[Observability Traces] Cache HIT for key: ${pageKey}`);
-                    return NextResponse.json(JSON.parse(cachedTraces));
+                    const parsed = typeof cachedTraces === "string" ? JSON.parse(cachedTraces) : cachedTraces;
+                    return NextResponse.json(parsed);
                 }
             } catch (rErr) {
                 console.warn("[Observability Traces] Redis lookup warning:", rErr);

@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 
         if (redisClient) {
             try {
-                cachedSec = await redisClient.get(secCacheKey);
+                cachedSec = await redisClient.get<string>(secCacheKey);
             } catch (rErr) {
                 console.warn("[Redis Warning] Error reading workspace_security cache:", rErr);
             }
@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
         let cachedFaqAnswer: string | null = null;
         if (redisClient) {
             try {
-                cachedFaqAnswer = await redisClient.get(faqCacheKey);
+                cachedFaqAnswer = await redisClient.get<string>(faqCacheKey);
             } catch (rErr) {
                 console.warn("[Redis Warning] Error reading FAQ cache:", rErr);
             }

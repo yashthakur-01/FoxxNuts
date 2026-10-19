@@ -10,15 +10,24 @@ def get_redis_url() -> str:
     """
     Resolves the Redis connection URI.
     Automatically constructs standard rediss:// TLS connection from Upstash REST variables if REDIS_URL is not set.
+    Ensures ssl_cert_reqs parameter is appended for rediss:// schemes to satisfy Celery RedisBackend requirement.
     """
-    if os.environ.get("REDIS_URL"):
-        return os.environ.get("REDIS_URL")
-    upstash_url = os.environ.get("UPSTASH_REDIS_REST_URL")
-    upstash_token = os.environ.get("UPSTASH_REDIS_REST_TOKEN")
-    if upstash_url and upstash_token:
-        host = upstash_url.replace("https://", "").replace("http://", "").strip("/")
-        return f"rediss://default:{upstash_token}@{host}:6379"
-    return "redis://localhost:6379/0"
+    url = os.environ.get("REDIS_URL")
+    if not url:
+        upstash_url = os.environ.get("UPSTASH_REDIS_REST_URL")
+        upstash_token = os.environ.get("UPSTASH_REDIS_REST_TOKEN")
+        if upstash_url and upstash_token:
+            host = upstash_url.replace("https://", "").replace("http://", "").strip("/")
+            url = f"rediss://default:{upstash_token}@{host}:6379"
+        else:
+            url = "redis://localhost:6379/0"
+
+    # Celery RedisBackend requires ssl_cert_reqs query parameter when using rediss://
+    if url.startswith("rediss://") and "ssl_cert_reqs" not in url:
+        delimiter = "&" if "?" in url else "?"
+        url = f"{url}{delimiter}ssl_cert_reqs=CERT_REQUIRED"
+
+    return url
 
 REDIS_URL = get_redis_url()
 is_ssl = REDIS_URL.startswith("rediss://")

@@ -4,14 +4,16 @@ import redis
 from supabase_client.client import supabase
 
 def get_redis_url() -> str:
-    if os.environ.get("REDIS_URL"):
-        return os.environ.get("REDIS_URL")
-    upstash_url = os.environ.get("UPSTASH_REDIS_REST_URL")
-    upstash_token = os.environ.get("UPSTASH_REDIS_REST_TOKEN")
-    if upstash_url and upstash_token:
-        host = upstash_url.replace("https://", "").replace("http://", "").strip("/")
-        return f"rediss://default:{upstash_token}@{host}:6379"
-    return "redis://localhost:6379/0"
+    url = os.environ.get("REDIS_URL")
+    if not url:
+        upstash_url = os.environ.get("UPSTASH_REDIS_REST_URL")
+        upstash_token = os.environ.get("UPSTASH_REDIS_REST_TOKEN")
+        if upstash_url and upstash_token:
+            host = upstash_url.replace("https://", "").replace("http://", "").strip("/")
+            url = f"rediss://default:{upstash_token}@{host}:6379"
+        else:
+            url = "redis://localhost:6379/0"
+    return url
 
 REDIS_URL = get_redis_url()
 

@@ -78,16 +78,27 @@ export async function checkRateLimit(
     // 2. Count active hits remaining in the sliding window
     pipe.zcard(redisKey);
     // 3. Query the oldest entry in the window to compute precise reset time
-    pipe.zrange(redisKey, "0", "0", "WITHSCORES");
+    pipe.zrange(redisKey, 0, 0, { withScores: true });
 
     const results = (await pipe.exec()) || [];
-    const count = (results?.[1]?.[1] as number) || 0;
-    const oldestData = (results?.[2]?.[1] as string[]) || [];
+    // Support both @upstash/redis [res0, res1, ...] and ioredis [[err, res0], [err, res1], ...] structures
+    const countRaw = results[1];
+    const count = typeof countRaw === "number" ? countRaw : (Array.isArray(countRaw) ? countRaw[1] : 0) || 0;
+
+    const oldestRaw = results[2];
+    let oldestData: (string | number)[] = [];
+    if (Array.isArray(oldestRaw)) {
+      if (oldestRaw.length > 0 && Array.isArray(oldestRaw[0])) {
+        oldestData = oldestRaw[0];
+      } else {
+        oldestData = oldestRaw as (string | number)[];
+      }
+    }
 
     // Calculate exact remaining time until the oldest item expires
     let resetInSeconds = windowSeconds;
     if (oldestData.length >= 2) {
-      const oldestTimestamp = parseFloat(oldestData[1]);
+      const oldestTimestamp = typeof oldestData[1] === "number" ? oldestData[1] : parseFloat(String(oldestData[1]));
       if (!isNaN(oldestTimestamp)) {
         const msRemaining = oldestTimestamp + windowMs - now;
         resetInSeconds = Math.max(1, Math.ceil(msRemaining / 1000));
@@ -107,7 +118,7 @@ export async function checkRateLimit(
     // Allowed: Add current hit with microsecond uniqueness and refresh key TTL
     const addPipe = redisClient.pipeline();
     const uniqueMember = `${now}:${Math.random().toString(36).slice(2, 8)}`;
-    addPipe.zadd(redisKey, now, uniqueMember);
+    addPipe.zadd(redisKey, { score: now, member: uniqueMember });
     addPipe.expire(redisKey, windowSeconds + 10);
     await addPipe.exec();
 

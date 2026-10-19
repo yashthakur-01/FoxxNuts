@@ -25,10 +25,11 @@ export async function POST(request: NextRequest) {
         const cacheKey = `observability_metrics:${workspace_id}`;
         if (redisClient) {
             try {
-                const cachedMetrics = await redisClient.get(cacheKey);
+                const cachedMetrics = await redisClient.get<string>(cacheKey);
                 if (cachedMetrics) {
                     console.log(`[Observability Metrics] Cache HIT for workspace: ${workspace_id}`);
-                    return NextResponse.json({ metrics: JSON.parse(cachedMetrics), success: true });
+                    const parsed = typeof cachedMetrics === "string" ? JSON.parse(cachedMetrics) : cachedMetrics;
+                    return NextResponse.json({ metrics: parsed, success: true });
                 }
             } catch (rErr) {
                 console.warn("[Observability Metrics] Redis get warning:", rErr);
