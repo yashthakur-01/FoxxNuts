@@ -116,15 +116,27 @@ export default function OnboardingPage() {
     init();
   }, [router, supabase]);
 
+  const getNormalizedFileType = (file: File) => {
+    const lower = file.name.toLowerCase();
+    if (lower.endsWith(".md") || lower.endsWith(".markdown")) {
+      return "text/markdown";
+    }
+    if (lower.endsWith(".pdf")) {
+      return "application/pdf";
+    }
+    return file.type || "application/octet-stream";
+  };
+
   const uploadToR2WithProgress = (
     url: string,
     file: File,
+    contentType: string,
     onProgress: (p: number) => void
   ): Promise<void> => {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("PUT", url);
-      xhr.setRequestHeader("Content-Type", file.type);
+      xhr.setRequestHeader("Content-Type", contentType);
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable)
           onProgress(Math.round((e.loaded / e.total) * 100));
@@ -275,6 +287,26 @@ export default function OnboardingPage() {
   // Step 2: Upload file
   const handleFilesSelected = async (files: File[]) => {
     if (!workspaceId || files.length === 0) return;
+
+    const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+    const validFiles: File[] = [];
+
+    for (const file of files) {
+      const lowerName = file.name.toLowerCase();
+      const isPdf = lowerName.endsWith(".pdf");
+      const isMd = lowerName.endsWith(".md") || lowerName.endsWith(".markdown");
+
+      if (!isPdf && !isMd) {
+        toast.error(`"${file.name}" is not supported. Please upload a PDF or Markdown (.md) file.`);
+      } else if (file.size > MAX_FILE_SIZE_BYTES) {
+        const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+        toast.error(`"${file.name}" is ${sizeMB}MB. Maximum allowed file size is 10MB.`);
+      } else {
+        validFiles.push(file);
+      }
+    }
+
+    if (validFiles.length === 0) return;
     setIsUploading(true);
 
     try {
@@ -283,12 +315,14 @@ export default function OnboardingPage() {
       } = await supabase.auth.getSession();
       if (!session) return;
 
-      for (const file of files) {
+      for (const file of validFiles) {
         const tempId = `temp-${Date.now()}`;
         setUploadedFiles((prev) => [
           ...prev,
           { file_id: tempId, file_name: file.name, status: "uploaded" },
         ]);
+
+        const normalizedType = getNormalizedFileType(file);
 
         const presignedRes = await fetch("/api/customer/uploadFile", {
           method: "POST",
@@ -298,9 +332,9 @@ export default function OnboardingPage() {
           },
           body: JSON.stringify({
             workspace_id: workspaceId,
-            file_name: file.name,
-            file_type: file.type || "application/octet-stream",
-            file_size: file.size,
+            fileName: file.name,
+            fileType: normalizedType,
+            fileSize: file.size,
           }),
         });
 
@@ -315,10 +349,20 @@ export default function OnboardingPage() {
           continue;
         }
 
-        const { upload_url, file_record } = presignedData;
-        const realFileId = file_record.id;
+        const { uploadUrl, upload_url, uniqueFileName, key } = presignedData;
+        const uploadTargetUrl = uploadUrl || upload_url;
+        const realFileId = uniqueFileName || presignedData.file_record?.id;
 
-        await uploadToR2WithProgress(upload_url, file, () => {});
+        await uploadToR2WithProgress(uploadTargetUrl, file, normalizedType, () => {});
+
+        // Save record in Supabase
+        await supabase.from("files").insert({
+          file_id: realFileId,
+          file_name: file.name,
+          workspace_id: workspaceId,
+          file_path: key,
+          status: "uploaded",
+        });
 
         setUploadedFiles((prev) =>
           prev.map((f) =>
@@ -330,7 +374,7 @@ export default function OnboardingPage() {
 
         toast.info(`Indexing "${file.name}" in background...`);
 
-        fetch("/api/customer/reprocessDocument", {
+        fetch("/api/customer/processDocument", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -338,10 +382,10 @@ export default function OnboardingPage() {
           },
           body: JSON.stringify({
             workspace_id: workspaceId,
-            file_id: realFileId,
+            fileName: realFileId,
           }),
         }).catch((err) => {
-          console.error("Reprocess error:", err);
+          console.error("Process error:", err);
           fetch("/api/customer/refundUpload", {
             method: "POST",
             headers: {
@@ -608,7 +652,7 @@ export default function OnboardingPage() {
                   Add your knowledge
                 </h2>
                 <p className="text-xs sm:text-sm text-[var(--fn-text-secondary)] mt-1">
-                  Upload documents to build your AI assistant&apos;s knowledge base.
+                  Upload PDF or Markdown (.md) documents to build your AI assistant&apos;s knowledge base.
                 </p>
               </div>
 

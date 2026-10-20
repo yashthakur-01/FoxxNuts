@@ -8,6 +8,7 @@ import Input from "../../../components/ui/Input";
 import Skeleton from "../../../components/ui/Skeleton";
 import WorkspaceDropdown from "../../../components/WorkspaceDropdown";
 import { SettingInfoButton } from "../../../components/ui/SettingInfoModal";
+import MarkdownRenderer from "../../../components/ui/MarkdownRenderer";
 
 const COLOR_PRESETS = [
   { name: "Crimson Red", value: "#E50914" },
@@ -525,32 +526,41 @@ export default function ChatbotStylingConfigPage() {
                 isDarkPreview ? "bg-[#080808]" : "bg-gray-50"
               }`}
             >
-              {previewMessages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
-                >
+              {previewMessages.map((msg) => {
+                if (msg.role === "bot" && !msg.text?.trim()) {
+                  return null;
+                }
+                return (
                   <div
-                    style={msg.role === "user" ? { backgroundColor: primaryColor } : {}}
-                    className={`max-w-[85%] sm:max-w-[78%] rounded-[var(--fn-radius-lg)] px-4 py-3 text-sm leading-relaxed shadow-xs ${
-                      msg.role === "user"
-                        ? "text-white rounded-br-xs font-medium"
-                        : isDarkPreview
-                        ? "bg-[#141414] text-gray-100 border border-[#2A2A2A] rounded-bl-xs"
-                        : "bg-white text-gray-900 border border-gray-200 rounded-bl-xs shadow-xs"
-                    }`}
+                    key={msg.id}
+                    className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
                   >
-                    <p className="whitespace-pre-wrap">{msg.text}</p>
+                    <div
+                      style={msg.role === "user" ? { backgroundColor: primaryColor } : {}}
+                      className={`max-w-[85%] sm:max-w-[78%] rounded-[var(--fn-radius-lg)] px-4 py-3 text-sm leading-relaxed shadow-xs ${
+                        msg.role === "user"
+                          ? "text-white rounded-br-xs font-medium"
+                          : isDarkPreview
+                          ? "bg-[#141414] text-gray-100 border border-[#2A2A2A] rounded-bl-xs"
+                          : "bg-white text-gray-900 border border-gray-200 rounded-bl-xs shadow-xs"
+                      }`}
+                    >
+                      {msg.role === "user" ? (
+                        <p className="whitespace-pre-wrap">{msg.text}</p>
+                      ) : (
+                        <MarkdownRenderer content={msg.text} isDark={isDarkPreview} />
+                      )}
+                    </div>
+                    <span
+                      className={`text-[10px] mt-1 px-1 ${
+                        isDarkPreview ? "text-neutral-500" : "text-gray-400"
+                      }`}
+                    >
+                      {msg.timestamp}
+                    </span>
                   </div>
-                  <span
-                    className={`text-[10px] mt-1 px-1 ${
-                      isDarkPreview ? "text-neutral-500" : "text-gray-400"
-                    }`}
-                  >
-                    {msg.timestamp}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
 
               {/* Typing Indicator */}
               {isPreviewChatting && (

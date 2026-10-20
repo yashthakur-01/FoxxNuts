@@ -8,6 +8,7 @@ import Input, { Textarea } from "../../../../components/ui/Input";
 import Skeleton from "../../../../components/ui/Skeleton";
 import WorkspaceDropdown from "../../../../components/WorkspaceDropdown";
 import { SettingInfoButton } from "../../../../components/ui/SettingInfoModal";
+import MarkdownRenderer from "../../../../components/ui/MarkdownRenderer";
 
 interface PreviewMessage {
   id: string;
@@ -435,26 +436,35 @@ export default function PromptsConfigPage() {
                 isDarkPreview ? "bg-[#080808]" : "bg-gray-50"
               }`}
             >
-              {previewMessages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
-                >
+              {previewMessages.map((msg) => {
+                if (msg.role === "bot" && !msg.text?.trim()) {
+                  return null;
+                }
+                return (
                   <div
-                    style={msg.role === "user" ? { backgroundColor: primaryColor } : {}}
-                    className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-xs sm:text-sm leading-relaxed shadow-xs ${
-                      msg.role === "user"
-                        ? "text-white rounded-br-xs font-medium"
-                        : isDarkPreview
-                        ? "bg-[#151515] text-[#EDEDED] border border-[#222222] rounded-bl-xs"
-                        : "bg-white text-gray-800 border border-gray-200/80 rounded-bl-xs"
-                    }`}
+                    key={msg.id}
+                    className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
                   >
-                    <p className="whitespace-pre-wrap">{msg.text}</p>
+                    <div
+                      style={msg.role === "user" ? { backgroundColor: primaryColor } : {}}
+                      className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-xs sm:text-sm leading-relaxed shadow-xs ${
+                        msg.role === "user"
+                          ? "text-white rounded-br-xs font-medium"
+                          : isDarkPreview
+                          ? "bg-[#151515] text-[#EDEDED] border border-[#222222] rounded-bl-xs"
+                          : "bg-white text-gray-800 border border-gray-200/80 rounded-bl-xs"
+                      }`}
+                    >
+                      {msg.role === "user" ? (
+                        <p className="whitespace-pre-wrap">{msg.text}</p>
+                      ) : (
+                        <MarkdownRenderer content={msg.text} isDark={isDarkPreview} />
+                      )}
+                    </div>
+                    <span className="text-[10px] text-gray-500 mt-1 px-1">{msg.timestamp}</span>
                   </div>
-                  <span className="text-[10px] text-gray-500 mt-1 px-1">{msg.timestamp}</span>
-                </div>
-              ))}
+                );
+              })}
 
               {isPreviewChatting && (
                 <div

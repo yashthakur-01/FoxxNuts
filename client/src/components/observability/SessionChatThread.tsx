@@ -1,6 +1,7 @@
 import React from "react";
 import type { SessionGroup, Trace } from "../../types";
 import Badge from "../ui/Badge";
+import MarkdownRenderer from "../ui/MarkdownRenderer";
 import { SkeletonRow } from "../ui/Skeleton";
 
 export interface SessionChatThreadProps {
@@ -213,9 +214,7 @@ export default function SessionChatThread({
                     {/* AI Response Turn */}
                     <div className="flex justify-start">
                       <div className="max-w-[90%] rounded-[var(--fn-radius-lg)] rounded-bl-xs px-4 py-3.5 bg-[var(--fn-elevated)] border border-[var(--fn-border)] text-[var(--fn-text)] text-sm space-y-3 shadow-xs">
-                        <p className="whitespace-pre-wrap leading-relaxed">
-                          {trace.final_response}
-                        </p>
+                        <MarkdownRenderer content={trace.final_response} />
 
                         {/* Micro telemetry tag bar & Inspect Action */}
                         <div className="pt-2 border-t border-[var(--fn-border)] flex flex-wrap items-center justify-between gap-2 text-xs">

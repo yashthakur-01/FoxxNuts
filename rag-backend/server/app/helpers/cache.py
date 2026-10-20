@@ -13,6 +13,8 @@ def get_redis_url() -> str:
             url = f"rediss://default:{upstash_token}@{host}:6379"
         else:
             url = "redis://localhost:6379/0"
+    if url and "ssl_cert_reqs=CERT_REQUIRED" in url:
+        url = url.replace("ssl_cert_reqs=CERT_REQUIRED", "ssl_cert_reqs=required")
     return url
 
 REDIS_URL = get_redis_url()
@@ -154,24 +156,33 @@ def append_chat_message_to_cache(session_id: str, sender_type: str, content: str
 # 3. OBSERVABILITY CACHE INVALIDATION
 # ==========================================
 
-def invalidate_observability_cache(workspace_id: str) -> bool:
+def invalidate_observability_cache(workspace_id: str, invalidate_historical: bool = False) -> bool:
     """
-    Invalidates cached observability metrics & traces for a given workspace using O(1) Set tracking.
+    Invalidates cached observability traces / current activity for a given workspace using O(1) Set tracking.
+    Historical 30-day aggregated metrics (observability_metrics:{workspace_id}) are kept intact to die
+    naturally upon TTL (600s) and lazily recalculated on cache miss, avoiding expensive recalculations on every message.
     """
     if redis_client:
         try:
             tracker_set_key = f"workspace_trace_keys:{workspace_id}"
             metrics_key = f"observability_metrics:{workspace_id}"
             
-            # Fetch registered page keys from the workspace Set tracker
+            # Fetch registered page keys from the workspace Set tracker (current active traces)
             registered_keys = list(redis_client.smembers(tracker_set_key))
             
-            keys_to_delete = [metrics_key, tracker_set_key]
+            # Delete current trace tracker & paginated trace pages, preserving historical 30d metrics
+            keys_to_delete = [tracker_set_key]
             if registered_keys:
                 keys_to_delete.extend(registered_keys)
                 
+            if invalidate_historical:
+                keys_to_delete.append(metrics_key)
+                
             redis_client.delete(*keys_to_delete)
-            print(f"[Observability Cache] INVALIDATED {len(keys_to_delete)} keys via Set tracker for workspace: {workspace_id}")
+            print(
+                f"[Observability Cache] INVALIDATED {len(keys_to_delete)} current trace keys for workspace: {workspace_id} "
+                f"(historical metrics {'invalidated' if invalidate_historical else 'preserved to expire on TTL'})"
+            )
             return True
         except Exception as err:
             print(f"[Observability Cache Warning] Invalidation failed: {err}")

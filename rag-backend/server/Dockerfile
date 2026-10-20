@@ -36,8 +36,8 @@ COPY --from=builder /app /app
 
 EXPOSE 8000
 
-# Default: run FastAPI via uvicorn (overridden for celery in docker-compose)
-# CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Default: run FastAPI via start.sh (celery worker runs in its own dedicated container in docker-compose)
 COPY start.sh .
 RUN chmod +x start.sh
 CMD ["./start.sh"]
+

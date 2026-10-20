@@ -302,7 +302,7 @@ export default function LoginPage() {
 
           <div className="space-y-3">
             {[
-              { label: "Upload your knowledge", desc: "PDF documents " },
+              { label: "Upload your knowledge", desc: "PDF & Markdown (.md) documents" },
               { label: "Configure your AI", desc: "Choose models, tune behavior" },
               { label: "Test instantly", desc: "Chat with your knowledge base" },
               { label: "Embed anywhere", desc: "One script tag, any website" },

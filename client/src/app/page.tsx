@@ -36,7 +36,7 @@ const DEMO_PRESETS = [
     question: "What are the mandatory password and 2FA requirements?",
     answer:
       "Passwords must be at least 14 characters with a mix of alphanumeric and special characters, rotated every 90 days. Hardware security keys (YubiKey) or authenticator apps (TOTP) are strictly mandatory across all internal tools.",
-    source: "InfoSec_Compliance_Guide.pdf (Page 9, Section 4.5)",
+    source: "InfoSec_Compliance_Guide.md (Section 4.5)",
     nodeTrajectory: ["intent_router", "hybrid_retriever", "jina_rerank", "chatbot_node", "evaluator_node"],
     latency: "380ms",
     tokens: 94,
@@ -225,7 +225,7 @@ export default function RootLayout({ children }) {
 
           {/* Subtitle */}
           <p className="text-base sm:text-xl text-[var(--fn-text-secondary)] max-w-3xl mx-auto leading-relaxed font-normal">
-            Upload your PDF manuals, SOPs, and handbooks. FoxxNuts indexes them with hybrid
+            Upload your PDF or Markdown manuals, SOPs, and handbooks. FoxxNuts indexes them with hybrid
             vector search, verifies every response through a self-correcting LangGraph loop, and
             embeds on your website with one line of code.
           </p>
@@ -315,19 +315,33 @@ export default function RootLayout({ children }) {
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-3 p-2.5 rounded-lg bg-[var(--fn-surface)] border border-[var(--fn-border)]">
-                      <div className="w-8 h-8 rounded-lg bg-red-500/10 text-red-500 flex items-center justify-center font-bold text-xs">
-                        PDF
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold text-[var(--fn-text)] truncate">
-                          Employee_Handbook_2026.pdf
-                        </p>
-                        <p className="text-[10px] text-[var(--fn-text-tertiary)] font-mono">
-                          124 Chunks · Cohere Dense + BM25 Sparse
-                        </p>
-                      </div>
-                    </div>
+                    {(() => {
+                      const demoFileName = selectedDemo.source.split(" ")[0];
+                      const isDemoMd = demoFileName.toLowerCase().endsWith(".md");
+                      return (
+                        <div className="flex items-center gap-3 p-2.5 rounded-lg bg-[var(--fn-surface)] border border-[var(--fn-border)]">
+                          <div
+                            className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
+                              isDemoMd
+                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                : "bg-red-500/10 text-red-500 border border-red-500/20"
+                            }`}
+                          >
+                            {isDemoMd ? "MD" : "PDF"}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-[var(--fn-text)] truncate">
+                              {demoFileName}
+                            </p>
+                            <p className="text-[10px] text-[var(--fn-text-tertiary)] font-mono">
+                              {isDemoMd
+                                ? "98 Chunks · Markdown AST + BM25 Sparse"
+                                : "124 Chunks · Cohere Dense + BM25 Sparse"}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     <div className="space-y-1.5 text-[11px] font-mono text-[var(--fn-text-secondary)]">
                       <div className="flex justify-between">
@@ -534,7 +548,7 @@ export default function RootLayout({ children }) {
             </div>
             <h3 className="text-lg font-bold text-[var(--fn-text)]">The RAG Engineering Tax</h3>
             <p className="text-xs sm:text-sm text-[var(--fn-text-secondary)] leading-relaxed">
-              Building reliable RAG in-house requires PyMuPDF chunking, dense vector DBs, BM25
+              Building reliable RAG in-house requires PyMuPDF and Markdown AST chunking, dense vector DBs, BM25
               sparse encoders, rerankers, Celery task workers, and Redis caches—months of infrastructure plumbing.
             </p>
           </div>
@@ -565,7 +579,7 @@ export default function RootLayout({ children }) {
               FAST-TRACK DEPLOYMENT
             </p>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-[var(--fn-text)] tracking-tight">
-              From Static PDF to Live Embed in 3 Steps.
+              From Raw PDF &amp; Markdown to Live Embed in 3 Steps.
             </h2>
           </div>
 
@@ -575,10 +589,10 @@ export default function RootLayout({ children }) {
               <div className="w-12 h-12 rounded-2xl bg-[var(--fn-accent)] text-white font-black text-lg flex items-center justify-center shadow-lg shadow-red-500/20">
                 1
               </div>
-              <h3 className="text-xl font-bold text-[var(--fn-text)]">Upload Knowledge PDFs</h3>
+              <h3 className="text-xl font-bold text-[var(--fn-text)]">Upload Knowledge PDFs &amp; Markdown</h3>
               <p className="text-sm text-[var(--fn-text-secondary)] leading-relaxed">
-                Upload your policy manuals, SOPs, or specs. Files are securely uploaded directly to
-                Cloudflare R2 with AWS SigV4 signed lengths, parsed by PyMuPDF, and vectorized with
+                Upload your policy manuals, SOPs, or specs in PDF or Markdown (.md) format. Files are securely uploaded directly to
+                Cloudflare R2 with AWS SigV4 signed lengths, parsed by PyMuPDF or native Markdown AST chunking, and vectorized with
                 Cohere &amp; BM25.
               </p>
             </div>
@@ -693,7 +707,7 @@ export default function RootLayout({ children }) {
             </span>
             <h3 className="text-xl font-bold text-[var(--fn-text)]">Automated Knowledge Gap Detection</h3>
             <p className="text-sm text-[var(--fn-text-secondary)] leading-relaxed">
-              Isolates questions that couldn't find matching context in your uploaded PDFs. Turns missed
+              Isolates questions that couldn't find matching context in your uploaded PDFs and Markdown documents. Turns missed
               queries into an actionable checklist of documentation to write next.
             </p>
           </div>
@@ -874,7 +888,7 @@ export default function RootLayout({ children }) {
             </h2>
 
             <p className="text-sm sm:text-base text-gray-300 max-w-xl mx-auto leading-relaxed">
-              Create your free workspace, upload your first PDF policy, and embed the chatbot on your site today.
+              Create your free workspace, upload your first PDF policy or Markdown guide, and embed the chatbot on your site today.
             </p>
 
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -887,7 +901,7 @@ export default function RootLayout({ children }) {
             </div>
 
             <p className="text-xs text-gray-400 font-mono pt-2">
-              No credit card required · Free tier includes 5 PDF documents &amp; full telemetry
+              No credit card required · Free tier includes 5 PDF or Markdown documents &amp; full telemetry
             </p>
           </div>
         </div>

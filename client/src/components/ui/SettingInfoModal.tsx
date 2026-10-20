@@ -334,7 +334,7 @@ export const SETTINGS_INFO_DATABASE: Record<string, SettingDetail> = {
     ],
     recommendations: [
       {
-        useCase: "Standard Multi-Page PDFs & Knowledge Bases",
+        useCase: "Standard Multi-Page PDFs, Markdown & Knowledge Bases",
         value: "1024 characters",
         explanation: "Optimal size for Cohere dense embeddings and BM25 sparse keyword extraction.",
       },

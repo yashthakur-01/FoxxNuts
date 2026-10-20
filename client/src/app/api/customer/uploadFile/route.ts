@@ -17,7 +17,17 @@ export async function POST(request: NextRequest) {
 
     try {
         const body = await request.json();
-        const { workspace_id, fileName, fileType, fileSize, file_size } = body;
+        const workspace_id = body.workspace_id;
+        const fileName = body.fileName || body.file_name;
+        const lowerName = typeof fileName === "string" ? fileName.toLowerCase() : "";
+        const defaultMime = lowerName.endsWith(".md") || lowerName.endsWith(".markdown")
+            ? "text/markdown"
+            : lowerName.endsWith(".pdf")
+            ? "application/pdf"
+            : "application/octet-stream";
+        const fileType = body.fileType || body.file_type || defaultMime;
+        const fileSize = body.fileSize;
+        const file_size = body.file_size;
 
         if (!workspace_id || !fileName || !fileType) {
             return NextResponse.json(
@@ -111,7 +121,9 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
             uploadUrl: presignedUrl,
+            upload_url: presignedUrl,
             uniqueFileName: uniqueFileId,
+            file_record: { id: uniqueFileId, name: fileName },
             key: key,
             message: "Presigned URL generated successfully",
             success: true

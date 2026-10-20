@@ -81,22 +81,102 @@ export default function KnowledgePage() {
     }
   };
 
+  // Realtime subscription for file status updates (Push-based via Supabase Realtime)
   useEffect(() => {
-    if (activeWorkspaceId) {
-      fetchFiles();
-    }
+    if (!activeWorkspaceId) return;
+
+    fetchFiles();
+
+    // Subscribe to live postgres changes on the 'files' table for the active workspace
+    const channel = supabase
+      .channel(`workspace-files-realtime-${activeWorkspaceId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "files",
+          filter: `workspace_id=eq.${activeWorkspaceId}`,
+        },
+        (payload) => {
+          if (payload.eventType === "UPDATE") {
+            const updated = payload.new as WorkspaceFile;
+            if (!updated || !updated.file_id) return;
+
+            setFiles((prev) =>
+              prev.map((f) => (f.file_id === updated.file_id ? { ...f, ...updated } : f))
+            );
+
+            if (updated.status === "completed") {
+              toast.success(`Upload and indexing completed for "${updated.file_name}"!`);
+              setReprocessingId((curr) => (curr === updated.file_id ? null : curr));
+            } else if (updated.status === "failed") {
+              setReprocessingId((curr) => (curr === updated.file_id ? null : curr));
+              toast.error(
+                `Processing failed for "${updated.file_name}". Please delete the file and re-upload. Your daily upload count has been restored.`
+              );
+              // Auto refund upload quota on failure
+              supabase.auth.getSession().then(({ data: { session } }) => {
+                if (session) {
+                  fetch("/api/customer/refundUpload", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      Authorization: session.access_token,
+                    },
+                  }).catch(console.error);
+                }
+              });
+            }
+          } else if (payload.eventType === "INSERT") {
+            const newFile = payload.new as WorkspaceFile;
+            if (newFile && newFile.file_id) {
+              setFiles((prev) => {
+                if (prev.some((f) => f.file_id === newFile.file_id)) return prev;
+                return [newFile, ...prev];
+              });
+            }
+          } else if (payload.eventType === "DELETE") {
+            const oldRecord = payload.old as { file_id?: string };
+            if (oldRecord?.file_id) {
+              setFiles((prev) => prev.filter((f) => f.file_id !== oldRecord.file_id));
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          console.log(`[Supabase Realtime] Subscribed to files table for workspace: ${activeWorkspaceId}`);
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [activeWorkspaceId]);
+
+  const getNormalizedFileType = (file: File) => {
+    const lower = file.name.toLowerCase();
+    if (lower.endsWith(".md") || lower.endsWith(".markdown")) {
+      return "text/markdown";
+    }
+    if (lower.endsWith(".pdf")) {
+      return "application/pdf";
+    }
+    return file.type || "application/octet-stream";
+  };
 
   // Upload helpers
   const uploadToR2WithProgress = (
     url: string,
     file: File,
+    contentType: string,
     onProgress: (p: number) => void
   ): Promise<void> => {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("PUT", url);
-      xhr.setRequestHeader("Content-Type", file.type);
+      xhr.setRequestHeader("Content-Type", contentType);
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {
           onProgress(Math.round((e.loaded / e.total) * 100));
@@ -145,6 +225,8 @@ export default function KnowledgePage() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) throw new Error("Not authenticated");
 
+        const normalizedType = getNormalizedFileType(file);
+
         // 1. Get Presigned URL with fileSize metadata
         const presignedRes = await fetch("/api/customer/uploadFile", {
           method: "POST",
@@ -155,7 +237,7 @@ export default function KnowledgePage() {
           body: JSON.stringify({
             workspace_id: activeWorkspaceId,
             fileName: file.name,
-            fileType: file.type || "application/octet-stream",
+            fileType: normalizedType,
             fileSize: file.size,
           }),
         });
@@ -166,8 +248,8 @@ export default function KnowledgePage() {
         }
         const { uploadUrl, uniqueFileName, key } = await presignedRes.json();
 
-        // 2. Upload to Cloudflare R2
-        await uploadToR2WithProgress(uploadUrl, file, (p) => setUploadProgress(p));
+        // 2. Upload to Cloudflare R2 with matching signed content-type
+        await uploadToR2WithProgress(uploadUrl, file, normalizedType, (p) => setUploadProgress(p));
 
         // 3. Save record in Supabase
         await supabase.from("files").insert({
@@ -193,50 +275,6 @@ export default function KnowledgePage() {
 
         toast.info(`Uploaded ${file.name}. Indexing in background...`);
         await fetchFiles();
-
-        // Poll for processing completion (max 5 minutes)
-        let pollCount = 0;
-        const MAX_POLLS = 120;
-        const pollInterval = setInterval(async () => {
-          pollCount++;
-          if (pollCount > MAX_POLLS) {
-            clearInterval(pollInterval);
-            return;
-          }
-
-          const { data } = await supabase
-            .from("files")
-            .select("status")
-            .eq("file_id", uniqueFileName)
-            .maybeSingle();
-
-          if (data?.status === "completed" || data?.status === "failed") {
-            setFiles((prev) =>
-              prev.map((f) =>
-                f.file_id === uniqueFileName
-                  ? { ...f, status: data.status as WorkspaceFile["status"] }
-                  : f
-              )
-            );
-            if (data.status === "completed") {
-              toast.success(`Upload and indexing completed for "${file.name}"!`);
-            } else {
-              // Refund daily upload quota in Redis so user doesn't lose quota on failure
-              fetch("/api/customer/refundUpload", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: session.access_token,
-                },
-              }).catch(console.error);
-
-              toast.error(
-                `Processing failed for "${file.name}". Please delete the file and re-upload. Your daily upload count has been restored.`
-              );
-            }
-            clearInterval(pollInterval);
-          }
-        }, 2500);
       } catch (err: any) {
         console.error("Upload error:", err);
         // Refund daily upload quota if upload failed before or during storage
@@ -289,32 +327,7 @@ export default function KnowledgePage() {
       setFiles((prev) =>
         prev.map((f) => (f.file_id === fileId ? { ...f, status: "processing" } : f))
       );
-      toast.info("Reprocessing queued...");
-
-      const pollInterval = setInterval(async () => {
-        const { data } = await supabase
-          .from("files")
-          .select("status")
-          .eq("file_id", fileId)
-          .maybeSingle();
-
-        if (data?.status === "completed" || data?.status === "failed") {
-          setFiles((prev) =>
-            prev.map((f) =>
-              f.file_id === fileId ? { ...f, status: data.status as WorkspaceFile["status"] } : f
-            )
-          );
-          setReprocessingId(null);
-          if (data.status === "completed") {
-            toast.success("Document reprocessed and indexed successfully!");
-          } else {
-            toast.error(
-              "Reprocessing failed. Please delete the file and re-upload."
-            );
-          }
-          clearInterval(pollInterval);
-        }
-      }, 2500);
+      toast.info("Reprocessing queued in background...");
     } catch (err: any) {
       console.error("Reprocess error:", err);
       toast.error(err.message || "Failed to reprocess file");
@@ -441,7 +454,7 @@ export default function KnowledgePage() {
             Knowledge Base
           </h1>
           <p className="text-xs sm:text-sm text-white/90 font-medium">
-            Manage files and documents indexed for <span className="font-bold text-white">{activeWorkspace?.workspace_name || "your workspace"}</span>
+            Manage PDF &amp; Markdown (.md) documents indexed for <span className="font-bold text-white">{activeWorkspace?.workspace_name || "your workspace"}</span>
           </p>
         </div>
 
@@ -545,7 +558,7 @@ export default function KnowledgePage() {
             description={
               searchQuery || statusFilter !== "all"
                 ? "No files match your search query. Try adjusting your search keywords or resetting filters."
-                : "Upload PDF documents, policy guides, or FAQs to train your AI assistant and ground chat responses."
+                : "Upload PDF or Markdown (.md) documents, policy guides, or FAQs to train your AI assistant and ground chat responses."
             }
             action={{
               label: "Add Documents",
@@ -647,7 +660,7 @@ export default function KnowledgePage() {
       >
         <div className="space-y-4">
           <p className="text-xs text-[var(--fn-text-secondary)]">
-            Upload PDF, text, markdown, or Word documents. They will be parsed, chunked, embedded with Cohere, and stored in vector database for retrieval.
+            Upload PDF or Markdown (.md) documents. They will be parsed, chunked, embedded with Cohere, and stored in vector database for retrieval.
           </p>
 
           <FileUpload

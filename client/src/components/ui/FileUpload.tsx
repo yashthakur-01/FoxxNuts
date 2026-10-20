@@ -91,11 +91,11 @@ export default function FileUpload({
       </svg>
 
       <p className="text-sm font-medium text-[var(--fn-text)] mb-1">
-        {isDragging ? 'Drop PDF or Markdown files here' : 'Drag PDF or Markdown files here'}
+        {isDragging ? 'Drop PDF or Markdown (.md) files here' : 'Drag PDF or Markdown (.md) files here'}
       </p>
       <p className="text-xs text-[var(--fn-text-tertiary)] mb-3">or click to browse</p>
       <p className="text-[10px] text-[var(--fn-text-tertiary)]">
-        PDF or Markdown documents — Max {maxSizeMB}MB per file
+        PDF or Markdown (.md) documents — Max {maxSizeMB}MB per file
       </p>
     </div>
   );
@@ -129,12 +129,23 @@ export function FileItem({
   reprocessing,
 }: FileItemProps) {
   const config = statusConfig[status] || statusConfig.uploaded;
+  const ext = fileName.split('.').pop()?.toLowerCase();
+  const isMd = ext === 'md' || ext === 'markdown';
+  const isPdf = ext === 'pdf';
 
   return (
     <div className="flex items-center gap-3 px-3 py-2.5 border border-[var(--fn-border)] rounded-[var(--fn-radius)] group hover:border-[var(--fn-text-tertiary)] transition-colors">
-      <svg className="w-4 h-4 text-[var(--fn-text-tertiary)] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-      </svg>
+      <div
+        className={`w-7 h-7 rounded-[var(--fn-radius-sm)] flex items-center justify-center font-bold text-[9px] font-mono shrink-0 ${
+          isMd
+            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+            : isPdf
+            ? 'bg-red-500/10 text-red-500 border border-red-500/20'
+            : 'bg-[var(--fn-elevated)] text-[var(--fn-text-secondary)] border border-[var(--fn-border)]'
+        }`}
+      >
+        {isMd ? 'MD' : isPdf ? 'PDF' : ext ? ext.slice(0, 3).toUpperCase() : 'DOC'}
+      </div>
 
       <div className="flex-1 min-w-0">
         <p className="text-sm text-[var(--fn-text)] truncate">{fileName}</p>

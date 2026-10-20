@@ -3,6 +3,7 @@ import type { Trace } from "../../types";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import Modal from "../ui/Modal";
+import MarkdownRenderer from "../ui/MarkdownRenderer";
 
 export interface TraceDetailsModalProps {
   selectedTrace: Trace | null;
@@ -176,9 +177,11 @@ export default function TraceDetailsModal({
               <span className="text-[10px] font-mono text-[var(--fn-text-tertiary)]">Model Output</span>
             </div>
             <div className="max-h-56 overflow-y-auto pr-1">
-              <p className="text-xs text-[var(--fn-text)] leading-relaxed whitespace-pre-wrap">
-                {selectedTrace.final_response || "No response recorded."}
-              </p>
+              {selectedTrace.final_response ? (
+                <MarkdownRenderer content={selectedTrace.final_response} className="text-xs" />
+              ) : (
+                <p className="text-xs text-[var(--fn-text-tertiary)] italic">No response recorded.</p>
+              )}
             </div>
           </div>
         </div>

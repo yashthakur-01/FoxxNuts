@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect, useState } from "react";
+import MarkdownRenderer from "./ui/MarkdownRenderer";
 
 export interface ChatMessage {
   id: string;
@@ -169,6 +170,12 @@ export default function ChatInterface({
         {messages.map((msg) => {
           const isHuman = msg.role === "human";
 
+          // If AI message is still empty (waiting for first streaming chunk), don't render an empty bubble.
+          // The typing indicator below will show the loading animation instead.
+          if (!isHuman && !msg.content?.trim()) {
+            return null;
+          }
+
           return (
             <div
               key={msg.id}
@@ -184,7 +191,11 @@ export default function ChatInterface({
                     : "bg-white text-gray-900 border border-gray-200 rounded-bl-xs shadow-xs font-normal"
                 }`}
               >
-                <p className="whitespace-pre-wrap">{msg.content}</p>
+                {isHuman ? (
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                ) : (
+                  <MarkdownRenderer content={msg.content} isDark={isDark} />
+                )}
               </div>
               <span
                 className={`text-xs mt-1.5 px-1 ${
@@ -200,7 +211,8 @@ export default function ChatInterface({
         {/* Typing Indicator */}
         {isChatting &&
           messages.length > 0 &&
-          messages[messages.length - 1]?.content === "" && (
+          (!messages[messages.length - 1]?.content?.trim() ||
+            messages[messages.length - 1]?.role === "human") && (
             <div className="flex flex-col items-start">
               <div
                 className={`rounded-2xl rounded-bl-xs px-4 py-3 flex items-center gap-2 shadow-xs border ${

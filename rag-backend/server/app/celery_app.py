@@ -25,7 +25,7 @@ def get_redis_url() -> str:
     # Celery RedisBackend requires ssl_cert_reqs query parameter when using rediss://
     if url.startswith("rediss://") and "ssl_cert_reqs" not in url:
         delimiter = "&" if "?" in url else "?"
-        url = f"{url}{delimiter}ssl_cert_reqs=CERT_REQUIRED"
+        url = f"{url}{delimiter}ssl_cert_reqs=required"
 
     return url
 
@@ -50,7 +50,7 @@ celery_config = {
 }
 
 celery_config["broker_transport_options"] = {
-    "polling_interval": 8,
+    "polling_interval": 10,
     "visibility_timeout": 3600,
 }
 

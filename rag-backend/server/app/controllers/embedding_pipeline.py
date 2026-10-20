@@ -128,7 +128,7 @@ async def store_docs(docs: list[Document], namespace: str | None = None) -> None
     encoder = get_bm25_encoder()
 
     batch_size = int(os.environ.get("BATCH_SIZE", 80))
-    delay = float(os.environ.get("TIME_SLEEP", 8))
+    delay = float(os.environ.get("TIME_SLEEP", 4))
     total_batches = (len(docs) + batch_size - 1) // batch_size
     print(f"📦 [Embedding Pipeline] Storing {len(docs)} document chunks in Pinecone directly across {total_batches} batch(es)...")
 
