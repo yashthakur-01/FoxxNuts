@@ -10,6 +10,7 @@ import FileUpload from "../../components/ui/FileUpload";
 import { FileItem } from "../../components/ui/FileUpload";
 import { useToast } from "../../lib/ToastContext";
 import { useTheme } from "../../lib/ThemeContext";
+import FoxMascotLoader from "../../components/ui/FoxMascotLoader";
 
 interface UploadedFile {
   file_id: string;
@@ -500,13 +501,7 @@ export default function OnboardingPage() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-[var(--fn-bg)] flex items-center justify-center font-sans">
-        <div className="animate-fn-pulse text-[var(--fn-text-secondary)] text-sm font-medium">
-          Loading Setup Wizard...
-        </div>
-      </div>
-    );
+    return <FoxMascotLoader variant="fullscreen" message="Preparing your workspace wizard..." />;
   }
 
   return (

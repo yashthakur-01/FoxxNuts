@@ -21,6 +21,15 @@ import TracesTable from "./observability/TracesTable";
 import KnowledgeGapsView from "./observability/KnowledgeGapsView";
 import TraceDetailsModal from "./observability/TraceDetailsModal";
 import DeleteConfirmModal from "./observability/DeleteConfirmModal";
+import FoxMascotLoader from "./ui/FoxMascotLoader";
+import RefreshAnalyticsButton from "./observability/RefreshAnalyticsButton";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useObservabilityMetrics,
+  useObservabilityTraces,
+  useObservabilityGaps,
+  useRefreshAnalytics,
+} from "../hooks/useObservability";
 
 /**
  * Observability & Analytics Section Orchestrator.
@@ -40,10 +49,29 @@ export default function ObservabilitySection({
     }
   }, [activeTabProp]);
 
-  const [metrics, setMetrics] = useState<Metrics | null>(null);
-  const [traces, setTraces] = useState<Trace[]>([]);
-  const [gaps, setGaps] = useState<GapItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const { data: metricsData, isLoading: metricsLoading, isFetching: metricsFetching } = useObservabilityMetrics(workspaceId);
+  const { data: tracesData, isLoading: tracesLoading, isFetching: tracesFetching } = useObservabilityTraces(workspaceId, 1, 100);
+  const { data: gapsData, isLoading: gapsLoading, isFetching: gapsFetching } = useObservabilityGaps(workspaceId);
+  const { refreshMetrics, refreshTraces, refreshGaps } = useRefreshAnalytics(workspaceId);
+
+  const metrics = metricsData?.metrics ?? null;
+  const traces = tracesData?.traces ?? [];
+  const gaps = gapsData?.gaps ?? [];
+
+  const loading = activeTab === "metrics" ? metricsLoading : activeTab === "traces" ? tracesLoading : gapsLoading;
+  const isTabFetching = activeTab === "metrics" ? metricsFetching : activeTab === "traces" ? tracesFetching : gapsFetching;
+
+  const handleRefreshCurrentTab = async () => {
+    if (activeTab === "metrics") {
+      await refreshMetrics();
+    } else if (activeTab === "traces") {
+      await refreshTraces(1, 100);
+    } else {
+      await refreshGaps(50);
+    }
+  };
+
   const [traceSearch, setTraceSearch] = useState("");
 
   // Trace View: "sessions" vs "flat"
@@ -87,9 +115,9 @@ export default function ObservabilitySection({
       if (selectedSessionId === sessionId) {
         setSelectedSessionId(null);
       }
-      setTraces((prev) => prev.filter((t) => t.session_id !== sessionId));
-      setGaps((prev) => prev.filter((g) => g.session_id !== sessionId));
-      fetchObservabilityData();
+      queryClient.invalidateQueries({ queryKey: ["observability_traces", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["observability_gaps", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["observability_metrics", workspaceId] });
     } catch (err: any) {
       console.error("Delete session error:", err);
       toast.error(err.message || "Failed to delete session traces");
@@ -126,9 +154,9 @@ export default function ObservabilitySection({
       if (selectedTrace?.id === traceId) {
         setSelectedTrace(null);
       }
-      setTraces((prev) => prev.filter((t) => t.id !== traceId));
-      setGaps((prev) => prev.filter((g) => g.trace_id !== traceId));
-      fetchObservabilityData();
+      queryClient.invalidateQueries({ queryKey: ["observability_traces", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["observability_gaps", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["observability_metrics", workspaceId] });
     } catch (err: any) {
       console.error("Delete trace error:", err);
       toast.error(err.message || "Failed to delete trace");
@@ -136,65 +164,6 @@ export default function ObservabilitySection({
       setDeletingTrace(false);
     }
   };
-
-  const fetchObservabilityData = async () => {
-    setLoading(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const headers = {
-        "Content-Type": "application/json",
-        Authorization: session.access_token,
-      };
-
-      // 1. Fetch Metrics
-      const resMetrics = await fetch("/api/customer/observability/metrics", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ workspace_id: workspaceId }),
-      });
-
-      if (resMetrics.ok) {
-        const data = await resMetrics.json();
-        setMetrics(data.metrics);
-      }
-
-      // 2. Fetch Traces
-      const resTraces = await fetch("/api/customer/observability/traces", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ workspace_id: workspaceId, page: 1, limit: 100 }),
-      });
-
-      if (resTraces.ok) {
-        const data = await resTraces.json();
-        setTraces(data.traces || []);
-      }
-
-      // 3. Fetch Gaps
-      const resGaps = await fetch("/api/customer/observability/gaps", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ workspace_id: workspaceId }),
-      });
-
-      if (resGaps.ok) {
-        const data = await resGaps.json();
-        setGaps(data.gaps || []);
-      }
-    } catch (err) {
-      console.error("Observability fetch error:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (workspaceId) {
-      fetchObservabilityData();
-    }
-  }, [workspaceId]);
 
   // Group traces into Sessions
   const sessionGroups = useMemo<SessionGroup[]>(() => {
@@ -359,19 +328,10 @@ export default function ObservabilitySection({
             </button>
           </div>
 
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={fetchObservabilityData}
-            loading={loading}
-            icon={
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-              </svg>
-            }
-          >
-            Refresh
-          </Button>
+          <RefreshAnalyticsButton
+            onRefresh={handleRefreshCurrentTab}
+            isRefreshing={isTabFetching}
+          />
         </div>
       )}
 
@@ -397,10 +357,22 @@ export default function ObservabilitySection({
           )}
 
           {/* Primary Rate & Health KPI Cards (8 Cards) */}
-          <MetricsCards metrics={metrics} />
+          {loading && !metrics ? (
+            <div className="bg-[var(--fn-surface)] border border-[var(--fn-border)] rounded-[var(--fn-radius-lg)] p-12 text-center">
+              <FoxMascotLoader
+                variant="section"
+                size="md"
+                message="Aggregating performance metrics and telemetry..."
+              />
+            </div>
+          ) : (
+            <>
+              <MetricsCards metrics={metrics} />
 
-          {/* 4 Interactive SVG Throughput & Token Graphs with Hover Scanner */}
-          <TimelineCharts metrics={metrics} />
+              {/* 4 Interactive SVG Throughput & Token Graphs with Hover Scanner */}
+              <TimelineCharts metrics={metrics} />
+            </>
+          )}
         </div>
       )}
 
@@ -495,6 +467,7 @@ export default function ObservabilitySection({
       {activeTab === "gaps" && (
         <KnowledgeGapsView
           gaps={gaps}
+          loading={loading}
           setSelectedSessionId={setSelectedSessionId}
           setTraceViewMode={setTraceViewMode}
           setActiveTab={setActiveTab}

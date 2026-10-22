@@ -30,7 +30,22 @@ export default function InteractiveGraphCard({
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
-  if (!data || data.length === 0) return null;
+  if (!data || data.length === 0) {
+    return (
+      <div className="bg-[var(--fn-surface)] border border-[var(--fn-border)] rounded-[var(--fn-radius-lg)] p-5 space-y-3">
+        <div>
+          <h4 className="text-sm font-semibold text-[var(--fn-text)] flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+            {title}
+          </h4>
+          <p className="text-xs text-[var(--fn-text-secondary)]">{subtitle}</p>
+        </div>
+        <div className="h-[135px] flex items-center justify-center text-xs text-[var(--fn-text-tertiary)] border border-dashed border-[var(--fn-border)] rounded-lg">
+          No telemetry recorded for this timeframe
+        </div>
+      </div>
+    );
+  }
 
   const maxVal = Math.max(...data.map((d) => Number(d[valKey]) || 0), 1);
   const height = 135;

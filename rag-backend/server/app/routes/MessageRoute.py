@@ -174,9 +174,7 @@ async def return_message(body: MessageRequest):
                                 "query_context_pairs": clean_query_context_pairs,
                                 "query_type": query_type
                             }).execute()
-                        ),
-                        # 4. Invalidate observability cache for fresh analytics
-                        asyncio.to_thread(invalidate_observability_cache, body.workspace_id)
+                        )
                     ]
 
                     # Execute all independent database/cache writes in parallel

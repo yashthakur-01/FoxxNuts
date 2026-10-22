@@ -1,8 +1,10 @@
 import React from "react";
 import type { GapItem } from "../../types";
+import FoxMascotLoader from "../ui/FoxMascotLoader";
 
 export interface KnowledgeGapsViewProps {
   gaps: GapItem[];
+  loading?: boolean;
   setSelectedSessionId: (id: string) => void;
   setTraceViewMode: (mode: "sessions" | "flat") => void;
   setActiveTab: (tab: "metrics" | "traces" | "gaps") => void;
@@ -15,6 +17,7 @@ export interface KnowledgeGapsViewProps {
  */
 export default function KnowledgeGapsView({
   gaps,
+  loading = false,
   setSelectedSessionId,
   setTraceViewMode,
   setActiveTab,
@@ -32,7 +35,15 @@ export default function KnowledgeGapsView({
         </p>
       </div>
 
-      {gaps.length === 0 ? (
+      {loading ? (
+        <div className="bg-[var(--fn-elevated)] border border-[var(--fn-border)] rounded-[var(--fn-radius)] p-12 text-center">
+          <FoxMascotLoader
+            variant="section"
+            size="md"
+            message="Analyzing query telemetry and identifying knowledge gaps..."
+          />
+        </div>
+      ) : gaps.length === 0 ? (
         <div className="bg-[var(--fn-elevated)] border border-[var(--fn-border)] rounded-[var(--fn-radius)] p-12 text-center space-y-2">
           <div className="w-10 h-10 mx-auto rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

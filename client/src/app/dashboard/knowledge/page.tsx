@@ -11,23 +11,29 @@ import FileUpload from "../../../components/ui/FileUpload";
 import Badge from "../../../components/ui/Badge";
 import EmptyState from "../../../components/ui/EmptyState";
 import Skeleton, { SkeletonRow } from "../../../components/ui/Skeleton";
-
-interface WorkspaceFile {
-  file_id: string;
-  file_name: string;
-  status: "uploaded" | "processing" | "completed" | "failed";
-  file_path?: string;
-  created_at: string;
-  updated_at?: string;
-}
+import PageHeader from "../../../components/layout/PageHeader";
+import FoxMascotLoader from "../../../components/ui/FoxMascotLoader";
+import RefreshAnalyticsButton from "../../../components/observability/RefreshAnalyticsButton";
+import { useQueryClient } from "@tanstack/react-query";
+import { useKnowledgeFiles } from "../../../hooks/useKnowledgeFiles";
+import type { WorkspaceFile } from "../../../hooks/useKnowledgeFiles";
 
 export default function KnowledgePage() {
   const supabase = createClient();
   const { activeWorkspaceId, activeWorkspace, loading: wsLoading } = useWorkspace();
   const { toast } = useToast();
 
-  const [files, setFiles] = useState<WorkspaceFile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const {
+    data: filesData,
+    isLoading: filesLoading,
+    isFetching: filesFetching,
+    refetch: refetchFiles,
+  } = useKnowledgeFiles(activeWorkspaceId);
+
+  const files = useMemo(() => filesData?.files || [], [filesData?.files]);
+  const loading = wsLoading || filesLoading;
+
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [filterOpen, setFilterOpen] = useState(false);
@@ -55,37 +61,9 @@ export default function KnowledgePage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteFile, setConfirmDeleteFile] = useState<WorkspaceFile | null>(null);
 
-  const fetchFiles = async () => {
-    if (!activeWorkspaceId) return;
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const res = await fetch("/api/customer/getFiles", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: session.access_token,
-        },
-        body: JSON.stringify({ workspace_id: activeWorkspaceId }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setFiles(data.files || []);
-      }
-    } catch (err) {
-      console.error("Error fetching files:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Realtime subscription for file status updates (Push-based via Supabase Realtime)
   useEffect(() => {
     if (!activeWorkspaceId) return;
-
-    fetchFiles();
 
     // Subscribe to live postgres changes on the 'files' table for the active workspace
     const channel = supabase
@@ -103,8 +81,13 @@ export default function KnowledgePage() {
             const updated = payload.new as WorkspaceFile;
             if (!updated || !updated.file_id) return;
 
-            setFiles((prev) =>
-              prev.map((f) => (f.file_id === updated.file_id ? { ...f, ...updated } : f))
+            queryClient.setQueryData(
+              ["workspace_files", activeWorkspaceId],
+              (old: { files: WorkspaceFile[] } | undefined) => ({
+                files: (old?.files || []).map((f) =>
+                  f.file_id === updated.file_id ? { ...f, ...updated } : f
+                ),
+              })
             );
 
             if (updated.status === "completed") {
@@ -131,15 +114,24 @@ export default function KnowledgePage() {
           } else if (payload.eventType === "INSERT") {
             const newFile = payload.new as WorkspaceFile;
             if (newFile && newFile.file_id) {
-              setFiles((prev) => {
-                if (prev.some((f) => f.file_id === newFile.file_id)) return prev;
-                return [newFile, ...prev];
-              });
+              queryClient.setQueryData(
+                ["workspace_files", activeWorkspaceId],
+                (old: { files: WorkspaceFile[] } | undefined) => {
+                  const existing = old?.files || [];
+                  if (existing.some((f) => f.file_id === newFile.file_id)) return old;
+                  return { files: [newFile, ...existing] };
+                }
+              );
             }
           } else if (payload.eventType === "DELETE") {
             const oldRecord = payload.old as { file_id?: string };
             if (oldRecord?.file_id) {
-              setFiles((prev) => prev.filter((f) => f.file_id !== oldRecord.file_id));
+              queryClient.setQueryData(
+                ["workspace_files", activeWorkspaceId],
+                (old: { files: WorkspaceFile[] } | undefined) => ({
+                  files: (old?.files || []).filter((f) => f.file_id !== oldRecord.file_id),
+                })
+              );
             }
           }
         }
@@ -153,7 +145,7 @@ export default function KnowledgePage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [activeWorkspaceId]);
+  }, [activeWorkspaceId, queryClient, supabase, toast]);
 
   const getNormalizedFileType = (file: File) => {
     const lower = file.name.toLowerCase();
@@ -274,7 +266,7 @@ export default function KnowledgePage() {
         });
 
         toast.info(`Uploaded ${file.name}. Indexing in background...`);
-        await fetchFiles();
+        await queryClient.invalidateQueries({ queryKey: ["workspace_files", activeWorkspaceId] });
       } catch (err: any) {
         console.error("Upload error:", err);
         // Refund daily upload quota if upload failed before or during storage
@@ -324,8 +316,13 @@ export default function KnowledgePage() {
 
       if (!res.ok) throw new Error("Reprocess request failed");
 
-      setFiles((prev) =>
-        prev.map((f) => (f.file_id === fileId ? { ...f, status: "processing" } : f))
+      queryClient.setQueryData(
+        ["workspace_files", activeWorkspaceId],
+        (old: { files: WorkspaceFile[] } | undefined) => ({
+          files: (old?.files || []).map((f) =>
+            f.file_id === fileId ? { ...f, status: "processing" } : f
+          ),
+        })
       );
       toast.info("Reprocessing queued in background...");
     } catch (err: any) {
@@ -361,7 +358,13 @@ export default function KnowledgePage() {
         throw new Error(data.message || "Failed to delete file");
       }
 
-      setFiles((prev) => prev.filter((f) => f.file_id !== fileId));
+      queryClient.setQueryData(
+        ["workspace_files", activeWorkspaceId],
+        (old: { files: WorkspaceFile[] } | undefined) => ({
+          files: (old?.files || []).filter((f) => f.file_id !== fileId),
+        })
+      );
+      queryClient.invalidateQueries({ queryKey: ["workspace_files", activeWorkspaceId] });
       toast.success("File and vectors deleted");
       setConfirmDeleteFile(null);
     } catch (err: any) {
@@ -432,42 +435,39 @@ export default function KnowledgePage() {
   };
 
   if (wsLoading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton height={32} width="20%" />
-        <Skeleton height={40} />
-        <div className="space-y-2">
-          {[1, 2, 3].map((i) => (
-            <SkeletonRow key={i} />
-          ))}
-        </div>
-      </div>
-    );
+    return <FoxMascotLoader variant="page" message="Loading knowledge base workspace..." />;
   }
 
   return (
     <div className="w-full h-full flex flex-col overflow-hidden animate-fn-fade-in font-sans">
-      {/* Vibrant Full-Bleed End-to-End Red Ribbon Header */}
-      <div className="w-full bg-gradient-to-r from-[#FF001E] via-[#FF1A35] to-[#E50914] text-white px-6 sm:px-8 py-4 sm:py-5 shadow-lg border-b border-red-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
-        <div className="space-y-1">
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Knowledge Base
-          </h1>
-          <p className="text-xs sm:text-sm text-white/90 font-medium">
-            Manage PDF &amp; Markdown (.md) documents indexed for <span className="font-bold text-white">{activeWorkspace?.workspace_name || "your workspace"}</span>
-          </p>
-        </div>
-
-        <button
-          onClick={() => setShowUploadModal(true)}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-black text-white hover:bg-neutral-900 border border-white/20 text-xs font-semibold transition-all shadow-md cursor-pointer active:scale-95 shrink-0"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          Upload Files
-        </button>
-      </div>
+      <PageHeader
+        title="Knowledge Base"
+        eyebrow="Document Repository"
+        description={
+          <span>
+            Indexed PDF &amp; Markdown documents for <span className="font-semibold text-[var(--fn-text)]">{activeWorkspace?.workspace_name || "your workspace"}</span>
+          </span>
+        }
+        actions={
+          <div className="flex items-center gap-2.5">
+            <RefreshAnalyticsButton
+              onRefresh={async () => {
+                await queryClient.invalidateQueries({ queryKey: ["workspace_files", activeWorkspaceId] });
+              }}
+              isRefreshing={filesFetching}
+            />
+            <button
+              onClick={() => setShowUploadModal(true)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--fn-accent)] hover:bg-[var(--fn-accent-hover)] text-white text-xs font-semibold transition-all shadow-sm cursor-pointer active:scale-95 shrink-0"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              Upload Files
+            </button>
+          </div>
+        }
+      />
 
       {/* Main Content Scroll Area */}
       <div className="flex-1 min-h-0 w-full overflow-y-auto p-5 sm:p-8 space-y-6">
@@ -542,10 +542,12 @@ export default function KnowledgePage() {
       {/* Files Table / List */}
       <div className="border border-[var(--fn-border)] rounded-[var(--fn-radius-lg)] bg-[var(--fn-surface)] overflow-hidden">
         {loading ? (
-          <div className="p-4 space-y-3">
-            {[1, 2, 3, 4].map((i) => (
-              <SkeletonRow key={i} />
-            ))}
+          <div className="p-12 flex items-center justify-center">
+            <FoxMascotLoader
+              variant="section"
+              size="md"
+              message="Fetching indexed documents..."
+            />
           </div>
         ) : filteredFiles.length === 0 ? (
           <EmptyState
@@ -669,16 +671,23 @@ export default function KnowledgePage() {
           />
 
           {isUploading && (
-            <div className="space-y-2 pt-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-[var(--fn-text)] font-medium">{uploadStatusText}</span>
-                <span className="text-[var(--fn-text-secondary)]">{uploadProgress}%</span>
-              </div>
-              <div className="w-full h-1.5 bg-[var(--fn-border)] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-[var(--fn-accent)] transition-all duration-200 rounded-full"
-                  style={{ width: `${uploadProgress}%` }}
-                />
+            <div className="space-y-3 pt-2 text-center flex flex-col items-center">
+              <FoxMascotLoader
+                variant="inline"
+                size="sm"
+                message={uploadStatusText || "Embedding and indexing in vector database..."}
+              />
+              <div className="w-full space-y-1">
+                <div className="flex items-center justify-between text-xs text-[var(--fn-text-secondary)]">
+                  <span>Processing documents</span>
+                  <span className="font-mono">{uploadProgress}%</span>
+                </div>
+                <div className="w-full h-1.5 bg-[var(--fn-border)] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[var(--fn-accent)] transition-all duration-200 rounded-full"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
               </div>
             </div>
           )}

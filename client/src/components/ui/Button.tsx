@@ -12,13 +12,13 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
-    'bg-[var(--fn-accent)] text-white border border-transparent hover:bg-white hover:text-[#0A0A0A] hover:border-[var(--fn-accent)]',
+    'bg-[var(--fn-accent)] text-white border border-transparent hover:bg-[var(--fn-accent-hover)] active:scale-[0.98] shadow-sm',
   secondary:
-    'bg-[var(--fn-elevated)] text-[var(--fn-text)] border border-[var(--fn-border)] hover:border-[var(--fn-text-tertiary)] hover:bg-[var(--fn-surface)]',
+    'bg-[var(--fn-elevated)] text-[var(--fn-text)] border border-[var(--fn-border)] hover:border-[var(--fn-border-subtle)] hover:bg-[var(--fn-surface)] active:scale-[0.98] shadow-sm',
   ghost:
-    'bg-transparent text-[var(--fn-text-secondary)] border border-transparent hover:text-[var(--fn-text)] hover:bg-[var(--fn-elevated)]',
+    'bg-transparent text-[var(--fn-text-secondary)] border border-transparent hover:text-[var(--fn-text)] hover:bg-[var(--fn-elevated)] active:scale-[0.98]',
   danger:
-    'bg-transparent text-[var(--fn-error)] border border-[var(--fn-error)]/30 hover:bg-[var(--fn-error)] hover:text-white hover:border-[var(--fn-error)]',
+    'bg-transparent text-[var(--fn-error)] border border-[var(--fn-error)]/30 hover:bg-[var(--fn-error)] hover:text-white hover:border-[var(--fn-error)] active:scale-[0.98]',
 };
 
 const sizeStyles: Record<ButtonSize, string> = {

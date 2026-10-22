@@ -3,6 +3,7 @@ import type { SessionGroup, Trace } from "../../types";
 import Badge from "../ui/Badge";
 import MarkdownRenderer from "../ui/MarkdownRenderer";
 import { SkeletonRow } from "../ui/Skeleton";
+import FoxMascotLoader from "../ui/FoxMascotLoader";
 
 export interface SessionChatThreadProps {
   filteredSessions: SessionGroup[];
@@ -49,10 +50,12 @@ export default function SessionChatThread({
 
         <div className="flex-1 overflow-y-auto divide-y divide-[var(--fn-border)] no-scrollbar">
           {loading ? (
-            <div className="p-4 space-y-3">
-              {[1, 2, 3, 4].map((i) => (
-                <SkeletonRow key={i} />
-              ))}
+            <div className="p-8 flex items-center justify-center">
+              <FoxMascotLoader
+                variant="section"
+                size="sm"
+                message="Loading sessions..."
+              />
             </div>
           ) : filteredSessions.length === 0 ? (
             <div className="p-8 text-center space-y-2">

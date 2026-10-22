@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect, useCallback } from "react";
+import { useTheme } from "../lib/ThemeContext";
 
 // ── Types & Palettes (Exclusively Shades of Vibrant Red) ──────────────
 interface ColorRGB {
@@ -60,6 +61,8 @@ interface AnimatedGridProps {
 
 // ── Component ────────────────────────────────────────────────────────
 export default function AnimatedGrid({ className = "" }: AnimatedGridProps) {
+  const { theme } = useTheme();
+  const isLight = theme === "light";
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const packetsRef = useRef<Packet[]>([]);
   const ripplesRef = useRef<Ripple[]>([]);
@@ -159,6 +162,12 @@ export default function AnimatedGrid({ className = "" }: AnimatedGridProps) {
     resize();
     window.addEventListener("resize", resize);
 
+    let currentScrollY = typeof window !== "undefined" ? window.scrollY : 0;
+    const onScroll = () => {
+      currentScrollY = window.scrollY || 0;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+
     const draw = (now: number) => {
       if (w === 0 || h === 0) {
         rafRef.current = requestAnimationFrame(draw);
@@ -170,6 +179,18 @@ export default function AnimatedGrid({ className = "" }: AnimatedGridProps) {
       const cols = Math.ceil(w / CELL) + 1;
       const rows = Math.ceil(h / CELL) + 1;
 
+      // ── Intensity Ramp: Whisper-soft in Hero, Rich & Vibrant in Post-Hero Sections ──
+      const vh = window.innerHeight || 800;
+      // 0 in first section (hero), smoothly ramps to 1.0 as user scrolls past hero into section 2+
+      const pastHero = Math.min(1, Math.max(0, (currentScrollY - vh * 0.25) / (vh * 0.45)));
+
+      // Dynamic Grid Boost after the first section (Hero Landing entry)
+      const intensityBoost = 1 + pastHero * 2.6; // Ramps up to 3.6x intensity
+      const depthFadeFloor = 0.18 + pastHero * 0.42; // Keeps entire grid luminous (floor 0.60) after hero
+      const depthXWeight = 0.5 - pastHero * 0.22;
+      const depthYWeight = 0.5 - pastHero * 0.22;
+      const activeLineWidth = 1.0 + pastHero * 0.35; // 1.35px crisper stroke
+
       // ── 1. Draw Grid Lines with Vibrant Red Baseline & Mouse Aura ──
       for (let col = 0; col <= cols; col++) {
         const x = col * CELL;
@@ -179,9 +200,9 @@ export default function AnimatedGrid({ className = "" }: AnimatedGridProps) {
           const y = row * CELL;
           const normY = y / h;
 
-          // Subtle diagonal fade for cinematic depth
-          const depthFade = Math.max(0.2, 1 - (normX * 0.45 + normY * 0.45));
-          const baseAlpha = 0.14 * depthFade; // Crisp, visible baseline
+          // Subtle diagonal fade in hero, high-clarity luminous grid after hero
+          const depthFade = Math.max(depthFadeFloor, 1 - (normX * depthXWeight + normY * depthYWeight));
+          const baseAlpha = (isLight ? 0.045 : 0.055) * intensityBoost * depthFade;
 
           // Interactive mouse proximity illumination
           let glowAlpha = 0;
@@ -190,16 +211,16 @@ export default function AnimatedGrid({ className = "" }: AnimatedGridProps) {
             const dx = x - mouseRef.current.x;
             const dy = y - mouseRef.current.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
-            const radius = 240;
+            const radius = 200;
 
             if (dist < radius) {
               const proximity = Math.pow(1 - dist / radius, 1.8);
-              glowAlpha = 0.55 * proximity;
+              glowAlpha = 0.28 * proximity; // Soft atmospheric halo
             }
           }
 
           const totalAlpha = baseAlpha + glowAlpha;
-          if (totalAlpha < 0.01) continue;
+          if (totalAlpha < 0.008) continue;
 
           // Vertical grid line segment
           if (row < rows) {
@@ -208,7 +229,7 @@ export default function AnimatedGrid({ className = "" }: AnimatedGridProps) {
             ctx.moveTo(x, y);
             ctx.lineTo(x, nextY);
             ctx.strokeStyle = `rgba(${PRIMARY_RED.glow},${totalAlpha})`;
-            ctx.lineWidth = glowAlpha > 0.2 ? 1.3 : 1.0;
+            ctx.lineWidth = activeLineWidth;
             ctx.stroke();
           }
 
@@ -219,26 +240,30 @@ export default function AnimatedGrid({ className = "" }: AnimatedGridProps) {
             ctx.moveTo(x, y);
             ctx.lineTo(nextX, y);
             ctx.strokeStyle = `rgba(${PRIMARY_RED.glow},${totalAlpha})`;
-            ctx.lineWidth = glowAlpha > 0.2 ? 1.3 : 1.0;
+            ctx.lineWidth = activeLineWidth;
             ctx.stroke();
           }
 
-          // Intersection point dots with vibrant red glow
-          if (totalAlpha > 0.04) {
+          // Intersection point dots with radiant crimson glow
+          const showDot = totalAlpha > 0.038 || (pastHero > 0.25 && (col % 2 === 0 || row % 2 === 0));
+          if (showDot) {
             ctx.beginPath();
-            ctx.arc(x, y, glowAlpha > 0.1 ? 2.0 : 1.5, 0, Math.PI * 2);
-            ctx.fillStyle = glowAlpha > 0.15 
-              ? `rgba(255, 255, 255, ${Math.min(1, totalAlpha * 1.4)})` 
-              : `rgba(${PRIMARY_RED.glow}, ${totalAlpha * 1.8})`;
+            const dotRadius = glowAlpha > 0.1 ? (1.5 + pastHero * 0.3) : (1.0 + pastHero * 0.4);
+            ctx.arc(x, y, dotRadius, 0, Math.PI * 2);
+            ctx.fillStyle = glowAlpha > 0.12 
+              ? (isLight ? `rgba(220, 25, 45, ${Math.min(0.75, totalAlpha * 1.3)})` : `rgba(255, 210, 220, ${Math.min(0.75, totalAlpha * 1.3)})`) 
+              : `rgba(${PRIMARY_RED.glow}, ${Math.min(0.85, (baseAlpha + 0.03) * 1.4)})`;
             ctx.fill();
           }
         }
       }
 
-      // ── 2. Auto-Spawn Vibrant Red Light Packets ────────────────────
-      if (now - lastSpawnRef.current > PACKET_INTERVAL) {
+      // ── 2. Auto-Spawn Vibrant Red Light Packets (Higher Density Post-Hero) ───
+      const activeInterval = PACKET_INTERVAL * (1.4 - pastHero * 0.6);
+      const maxPackets = Math.floor(12 + pastHero * 8);
+      if (now - lastSpawnRef.current > activeInterval) {
         lastSpawnRef.current = now;
-        if (packetsRef.current.length < 22) {
+        if (packetsRef.current.length < maxPackets) {
           spawnPacket(cols, rows);
         }
       }
@@ -256,11 +281,11 @@ export default function AnimatedGrid({ className = "" }: AnimatedGridProps) {
 
         const glowColor = p.color.glow;
 
-        // Radiant Outer Glow Halo
-        const glowRadius = p.size * 4.5;
+        // Radiant Outer Glow Halo - subtle and delicate
+        const glowRadius = p.size * 3.5;
         const haloGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowRadius);
-        haloGrad.addColorStop(0, `rgba(${glowColor}, ${0.95 * p.opacity * fade})`);
-        haloGrad.addColorStop(0.4, `rgba(${glowColor}, ${0.40 * p.opacity * fade})`);
+        haloGrad.addColorStop(0, `rgba(${glowColor}, ${0.60 * p.opacity * fade})`);
+        haloGrad.addColorStop(0.5, `rgba(${glowColor}, ${0.20 * p.opacity * fade})`);
         haloGrad.addColorStop(1, `rgba(${glowColor}, 0)`);
 
         ctx.beginPath();
@@ -268,27 +293,29 @@ export default function AnimatedGrid({ className = "" }: AnimatedGridProps) {
         ctx.fillStyle = haloGrad;
         ctx.fill();
 
-        // Ultra Bright Core
+        // Core Particle
         ctx.beginPath();
-        ctx.arc(cx, cy, p.size, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255, 255, 255, ${0.98 * p.opacity * fade})`;
+        ctx.arc(cx, cy, p.size * 0.9, 0, Math.PI * 2);
+        ctx.fillStyle = isLight
+          ? `rgba(${glowColor}, ${0.85 * p.opacity * fade})`
+          : `rgba(255, 230, 235, ${0.85 * p.opacity * fade})`;
         ctx.fill();
 
-        // Vivid Tail Gradient Trail
-        const tailLen = Math.min(p.progress, p.trailLength);
+        // Delicate Tail Gradient Trail
+        const tailLen = Math.min(p.progress, p.trailLength * 0.85);
         const tailX = p.x + (p.targetX - p.x) * Math.max(0, p.progress - tailLen);
         const tailY = p.y + (p.targetY - p.y) * Math.max(0, p.progress - tailLen);
 
         const trailGrad = ctx.createLinearGradient(tailX, tailY, cx, cy);
         trailGrad.addColorStop(0, `rgba(${glowColor}, 0)`);
-        trailGrad.addColorStop(0.6, `rgba(${glowColor}, ${0.60 * p.opacity * fade})`);
-        trailGrad.addColorStop(1, `rgba(${glowColor}, ${0.95 * p.opacity * fade})`);
+        trailGrad.addColorStop(0.5, `rgba(${glowColor}, ${0.30 * p.opacity * fade})`);
+        trailGrad.addColorStop(1, `rgba(${glowColor}, ${0.65 * p.opacity * fade})`);
 
         ctx.beginPath();
         ctx.moveTo(tailX, tailY);
         ctx.lineTo(cx, cy);
         ctx.strokeStyle = trailGrad;
-        ctx.lineWidth = p.size * 1.2;
+        ctx.lineWidth = p.size;
         ctx.stroke();
 
         return true;
@@ -421,6 +448,7 @@ export default function AnimatedGrid({ className = "" }: AnimatedGridProps) {
 
     return () => {
       window.removeEventListener("resize", resize);
+      window.removeEventListener("scroll", onScroll);
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mousedown", onPointerDown);
       window.removeEventListener("touchmove", onTouchMove);

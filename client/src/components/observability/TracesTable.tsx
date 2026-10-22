@@ -3,6 +3,7 @@ import type { Trace } from "../../types";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import { SkeletonRow } from "../ui/Skeleton";
+import FoxMascotLoader from "../ui/FoxMascotLoader";
 
 export interface TracesTableProps {
   filteredFlatTraces: Trace[];
@@ -37,10 +38,12 @@ export default function TracesTable({
       </div>
 
       {loading ? (
-        <div className="p-4 space-y-3">
-          {[1, 2, 3, 4].map((i) => (
-            <SkeletonRow key={i} />
-          ))}
+        <div className="p-10 flex items-center justify-center">
+          <FoxMascotLoader
+            variant="section"
+            size="md"
+            message="Retrieving multi-node execution traces..."
+          />
         </div>
       ) : filteredFlatTraces.length === 0 ? (
         <div className="p-12 text-center text-xs text-[var(--fn-text-secondary)]">

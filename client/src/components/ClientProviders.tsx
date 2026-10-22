@@ -3,6 +3,7 @@
 import React from "react";
 import { ThemeProvider } from "../lib/ThemeContext";
 import { ToastProvider } from "../lib/ToastContext";
+import QueryProvider from "../lib/QueryProvider";
 import ToastRenderer from "./ui/Toast";
 
 export default function ClientProviders({
@@ -11,11 +12,13 @@ export default function ClientProviders({
   children: React.ReactNode;
 }) {
   return (
-    <ThemeProvider>
-      <ToastProvider>
-        {children}
-        <ToastRenderer />
-      </ToastProvider>
-    </ThemeProvider>
+    <QueryProvider>
+      <ThemeProvider>
+        <ToastProvider>
+          {children}
+          <ToastRenderer />
+        </ToastProvider>
+      </ThemeProvider>
+    </QueryProvider>
   );
 }

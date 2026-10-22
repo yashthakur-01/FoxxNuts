@@ -9,6 +9,8 @@ import Skeleton from "../../../components/ui/Skeleton";
 import WorkspaceDropdown from "../../../components/WorkspaceDropdown";
 import { SettingInfoButton } from "../../../components/ui/SettingInfoModal";
 import MarkdownRenderer from "../../../components/ui/MarkdownRenderer";
+import PageHeader from "../../../components/layout/PageHeader";
+import FoxMascotLoader from "../../../components/ui/FoxMascotLoader";
 
 const COLOR_PRESETS = [
   { name: "Crimson Red", value: "#E50914" },
@@ -202,54 +204,37 @@ export default function ChatbotStylingConfigPage() {
   };
 
   if (wsLoading) {
-    return (
-      <div className="w-full h-full flex flex-col p-6 space-y-4">
-        <Skeleton height={48} width="30%" />
-        <Skeleton height={600} />
-      </div>
-    );
+    return <FoxMascotLoader variant="page" message="Loading chatbot styling preferences..." />;
   }
 
   const isDarkPreview = chatbotTheme === "dark";
 
   return (
     <div className="w-full h-full flex flex-col overflow-hidden animate-fn-fade-in font-sans">
-      {/* ============================================================
-          VIBRANT FULL-BLEED END-TO-END RED RIBBON HEADER
-          ============================================================ */}
-      <div className="w-full bg-gradient-to-r from-[#FF001E] via-[#FF1A35] to-[#E50914] text-white px-6 sm:px-8 py-4 sm:py-5 shadow-lg border-b border-red-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              Chatbot Styling & Theme
-            </h1>
-            <SettingInfoButton settingId="styling-section" size="md" className="text-white/80 hover:text-white hover:bg-white/20" />
-          </div>
-          <p className="text-xs sm:text-sm text-white/90 font-medium">
-            Customize display identity, brand accent colors, theme styles, and widget alignment with live preview.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <WorkspaceDropdown />
-          {hasChanges && (
-            <span className="px-3 py-1 rounded-lg bg-black/40 text-amber-300 border border-amber-400/30 text-xs font-semibold flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-              Unsaved Changes
-            </span>
-          )}
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-black text-white hover:bg-neutral-900 border border-white/20 text-xs font-semibold transition-all shadow-md cursor-pointer active:scale-95 disabled:opacity-50"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-            </svg>
-            {saving ? "Saving..." : "Save Styling"}
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Chatbot Styling & Theme"
+        eyebrow="Appearance & Identity"
+        description="Customize display identity, brand accent colors, theme styles, and widget alignment with live preview."
+      >
+        <WorkspaceDropdown />
+        <SettingInfoButton settingId="styling-section" size="sm" />
+        {hasChanges && (
+          <span className="px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-500 border border-amber-500/20 text-xs font-medium flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+            Unsaved Changes
+          </span>
+        )}
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--fn-accent)] hover:bg-[var(--fn-accent-hover)] text-white text-xs font-semibold transition-all shadow-sm cursor-pointer active:scale-95 disabled:opacity-50"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+          </svg>
+          {saving ? "Saving..." : "Save Styling"}
+        </button>
+      </PageHeader>
 
       {/* 50/50 Split Screen: Left Scrollable Settings | Right Fixed Live Chatbot */}
       <div className="w-full flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch p-5 sm:p-7 overflow-hidden">

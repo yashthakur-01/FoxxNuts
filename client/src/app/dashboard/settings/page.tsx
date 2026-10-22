@@ -9,6 +9,8 @@ import Input, { Textarea } from "../../../components/ui/Input";
 import Modal from "../../../components/ui/Modal";
 import Skeleton from "../../../components/ui/Skeleton";
 import WorkspaceDropdown from "../../../components/WorkspaceDropdown";
+import PageHeader from "../../../components/layout/PageHeader";
+import FoxMascotLoader from "../../../components/ui/FoxMascotLoader";
 
 export default function WorkspaceSettingsPage() {
   const supabase = createClient();
@@ -203,31 +205,21 @@ export default function WorkspaceSettingsPage() {
   };
 
   if (wsLoading) {
-    return (
-      <div className="space-y-4 p-6">
-        <Skeleton height={48} width="30%" />
-        <Skeleton height={300} />
-      </div>
-    );
+    return <FoxMascotLoader variant="page" message="Loading workspace & security settings..." />;
   }
 
   return (
     <div className="w-full h-full flex flex-col overflow-hidden animate-fn-fade-in font-sans">
-      {/* Vibrant Full-Bleed End-to-End Red Ribbon Header */}
-      <div className="w-full bg-gradient-to-r from-[#FF001E] via-[#FF1A35] to-[#E50914] text-white px-6 sm:px-8 py-4 sm:py-5 shadow-lg border-b border-red-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
-        <div className="space-y-1">
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Workspace & Settings
-          </h1>
-          <p className="text-xs sm:text-sm text-white/90 font-medium">
-            Manage workspace preferences, allowed domain whitelist, and organization settings
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <WorkspaceDropdown />
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Workspace Management"
+        title="Workspace & Security Settings"
+        description="Configure workspace attributes, widget domain allowlists, and deployment security."
+        actions={
+          <div className="flex items-center gap-3">
+            <WorkspaceDropdown />
+          </div>
+        }
+      />
 
       {/* Main Content Area */}
       <div className="flex-1 min-h-0 w-full overflow-y-auto p-5 sm:p-8 space-y-6">

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ChatInterface, { ChatMessage, ChatInterfaceConfig } from '@/components/ChatInterface';
+import { useEmbedConfig, useEmbedHistory } from '@/hooks/useChat';
 
 interface ChatbotPublicConfig extends ChatInterfaceConfig {
   workspace_id: string;
@@ -47,76 +48,44 @@ function EmbedChatWidget() {
     }
   }, [workspaceId]);
 
-  // Fetch Public Workspace Configuration & Previous Chat History
+  const { data: remoteConfig } = useEmbedConfig(workspaceId || null);
+  const { data: remoteHistory } = useEmbedHistory(workspaceId || null, visitorId || null);
+
+  // Sync widget configuration from TanStack Query cache
   useEffect(() => {
-    if (!workspaceId) return;
+    if (remoteConfig) {
+      setConfig((prev) => ({
+        ...prev,
+        ...remoteConfig,
+      }));
 
-    const fetchConfigAndHistory = async () => {
-      try {
-        let welcomeMsg = 'Hello! How can I help you today?';
-
-        // 1. Fetch public configuration
-        const res = await fetch('/api/embed/getConfig', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ workspace_id: workspaceId }),
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          if (data.config) {
-            setConfig(data.config);
-            welcomeMsg = data.config.welcome_message || welcomeMsg;
-
-            // Sync configured alignment position with the parent loader iframe container
-            if (typeof window !== 'undefined') {
-              window.parent.postMessage(
-                {
-                  type: 'SYNC_WIDGET_CONFIG',
-                  position: data.config.widget_position || 'bottom-right',
-                },
-                '*'
-              );
-            }
-          }
-        }
-
-        // 2. Fetch previous chat history for the visitor session
-        if (visitorId) {
-          const histRes = await fetch('/api/embed/getHistory', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              workspace_id: workspaceId,
-              session_id: visitorId,
-            }),
-          });
-
-          if (histRes.ok) {
-            const histData = await histRes.json();
-            if (Array.isArray(histData.messages) && histData.messages.length > 0) {
-              setMessages(histData.messages);
-              return;
-            }
-          }
-        }
-
-        // 3. Fallback to default welcome message if no history exists yet
-        setMessages([
+      if (typeof window !== 'undefined') {
+        window.parent.postMessage(
           {
-            id: 'welcome-1',
-            role: 'ai',
-            content: welcomeMsg,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            type: 'SYNC_WIDGET_CONFIG',
+            position: remoteConfig.widget_position || 'bottom-right',
           },
-        ]);
-      } catch (err) {
-        console.error('Failed to fetch widget config or history:', err);
+          '*'
+        );
       }
-    };
+    }
+  }, [remoteConfig]);
 
-    fetchConfigAndHistory();
-  }, [workspaceId, visitorId]);
+  // Sync visitor chat history from TanStack Query cache
+  useEffect(() => {
+    if (remoteHistory?.messages && remoteHistory.messages.length > 0) {
+      setMessages(remoteHistory.messages);
+    } else if (messages.length === 0) {
+      setMessages([
+        {
+          id: 'welcome-1',
+          role: 'ai',
+          content: config.welcome_message || 'Hello! How can I help you today?',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+      ]);
+    }
+  }, [remoteHistory, config.welcome_message]);
 
   // Send postMessage to Parent Host Window to Resize Iframe
   const toggleWidget = (nextState: boolean) => {

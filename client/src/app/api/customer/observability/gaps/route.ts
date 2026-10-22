@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import supabase from "../../../../../supabase/adminClient";
+import redisClient from "../../../../../lib/redisClient";
 
 import { authenticateWorkspace } from "../../../../../lib/workspaceAuth";
 import type { GapItem } from "../../../../../types";
@@ -7,7 +8,7 @@ import type { GapItem } from "../../../../../types";
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { workspace_id, limit = 50 } = body;
+        const { workspace_id, limit = 50, refresh = false } = body;
 
         if (!workspace_id) {
             return NextResponse.json(
@@ -20,6 +21,21 @@ export async function POST(request: NextRequest) {
         const auth = await authenticateWorkspace(request, workspace_id);
         if (auth.errorResponse) {
             return auth.errorResponse;
+        }
+
+        // 1. Check Redis Cache (bypassed if explicit refresh requested)
+        const cacheKey = `observability_gaps:${workspace_id}`;
+        if (redisClient && !refresh) {
+            try {
+                const cachedGaps = await redisClient.get<string>(cacheKey);
+                if (cachedGaps) {
+                    console.log(`[Observability Gaps] Cache HIT for workspace: ${workspace_id}`);
+                    const parsed = typeof cachedGaps === "string" ? JSON.parse(cachedGaps) : cachedGaps;
+                    return NextResponse.json(parsed);
+                }
+            } catch (rErr) {
+                console.warn("[Observability Gaps] Redis get warning:", rErr);
+            }
         }
 
         // Fetch traces for workspace
@@ -71,12 +87,22 @@ export async function POST(request: NextRequest) {
         });
 
         const slicedGaps = gapItems.slice(0, limit);
-
-        return NextResponse.json({
+        const gapsPayload = {
             gaps: slicedGaps,
             total_gaps: gapItems.length,
             success: true
-        });
+        };
+
+        if (redisClient) {
+            try {
+                await redisClient.setex(cacheKey, 300, JSON.stringify(gapsPayload));
+                console.log(`[Observability Gaps] SETEX successful for workspace: ${workspace_id}`);
+            } catch (rErr) {
+                console.warn("[Observability Gaps] Redis setex warning:", rErr);
+            }
+        }
+
+        return NextResponse.json(gapsPayload);
 
     } catch (error) {
         console.error("Observability gaps endpoint error:", error);

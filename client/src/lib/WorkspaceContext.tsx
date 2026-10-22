@@ -1,7 +1,8 @@
 'use client';
 
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState, useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createClient } from '../supabase/browserClient';
 
 export interface Workspace {
@@ -46,19 +47,24 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const supabase = createClient();
   const router = useRouter();
   const pathname = usePathname();
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  const refreshWorkspaces = useCallback(async () => {
-    try {
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('fn-active-workspace') || null;
+    }
+    return null;
+  });
+
+  const { data, isLoading: queryLoading } = useQuery<{ workspaces: Workspace[] }>({
+    queryKey: ['workspaces'],
+    queryFn: async () => {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (!session || sessionError) {
-        setLoading(false);
         if (!pathname.startsWith('/login') && !pathname.startsWith('/embed')) {
           router.replace('/login');
         }
-        return;
+        return { workspaces: [] };
       }
 
       const res = await fetch('/api/customer/getWorkspaces', {
@@ -67,52 +73,61 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
       if (res.status === 401) {
         router.replace('/login');
-        return;
+        return { workspaces: [] };
       }
 
-      if (res.ok) {
-        const data = await res.json();
-        const ws: Workspace[] = data.workspaces || [];
-        setWorkspaces(ws);
+      if (!res.ok) throw new Error('Failed to fetch workspaces');
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+  });
 
-        // If user has no workspace or none with completed onboarding, redirect to onboarding wizard
-        if (ws.length === 0 || !ws.some(w => w.onboarding_completed)) {
-          if (!pathname.startsWith('/onboarding') && !pathname.startsWith('/login')) {
-            router.push('/onboarding');
-            return;
-          }
-        }
+  const workspaces = useMemo(() => data?.workspaces || [], [data?.workspaces]);
+  const loading = queryLoading;
 
-        // Restore last active workspace from localStorage, or use first
-        if (ws.length > 0) {
-          const stored = localStorage.getItem('fn-active-workspace');
-          const match = ws.find((w: Workspace) => w.id === stored);
-          setActiveWorkspaceId(match ? match.id : ws[0].id);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to fetch workspaces:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [supabase, router, pathname]);
+  const refreshWorkspaces = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ['workspaces'] });
+  }, [queryClient]);
 
+  // Handle workspace redirection & default selection
   useEffect(() => {
-    refreshWorkspaces();
+    if (!queryLoading) {
+      // If user has no workspace or none with completed onboarding, redirect to onboarding wizard
+      if (workspaces.length === 0 || !workspaces.some(w => w.onboarding_completed)) {
+        if (!pathname.startsWith('/onboarding') && !pathname.startsWith('/login') && !pathname.startsWith('/embed')) {
+          router.push('/onboarding');
+          return;
+        }
+      }
 
-    // Listen to real-time auth changes (signout, token expiry, session refresh)
+      if (workspaces.length > 0) {
+        const stored = typeof window !== 'undefined' ? localStorage.getItem('fn-active-workspace') : null;
+        const match = workspaces.find((w: Workspace) => w.id === stored);
+        if (!activeWorkspaceId || !workspaces.some(w => w.id === activeWorkspaceId)) {
+          setActiveWorkspaceId(match ? match.id : workspaces[0].id);
+        }
+      }
+    }
+  }, [workspaces, queryLoading, pathname, router, activeWorkspaceId]);
+
+  // Listen to real-time auth changes (signout, token expiry, session refresh)
+  useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT' || !session) {
+        queryClient.clear();
         if (!pathname.startsWith('/login') && !pathname.startsWith('/embed')) {
           router.replace('/login');
         }
+      } else if (event === 'SIGNED_IN') {
+        queryClient.invalidateQueries({ queryKey: ['workspaces'] });
       }
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [refreshWorkspaces, supabase, router, pathname]);
+  }, [supabase, router, pathname, queryClient]);
 
   useEffect(() => {
     if (activeWorkspaceId) {
@@ -120,7 +135,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     }
   }, [activeWorkspaceId]);
 
-  const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId) || null;
+  const activeWorkspace = useMemo(
+    () => workspaces.find(w => w.id === activeWorkspaceId) || null,
+    [workspaces, activeWorkspaceId]
+  );
 
   return (
     <WorkspaceContext.Provider

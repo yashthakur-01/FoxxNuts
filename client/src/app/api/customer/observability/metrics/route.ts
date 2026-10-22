@@ -6,7 +6,7 @@ import redisClient from "../../../../../lib/redisClient";
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { workspace_id } = body;
+        const { workspace_id, refresh = false } = body;
 
         if (!workspace_id) {
             return NextResponse.json(
@@ -21,9 +21,9 @@ export async function POST(request: NextRequest) {
             return auth.errorResponse;
         }
 
-        // 1. Check Redis Cache
+        // 1. Check Redis Cache (bypassed if explicit refresh requested)
         const cacheKey = `observability_metrics:${workspace_id}`;
-        if (redisClient) {
+        if (redisClient && !refresh) {
             try {
                 const cachedMetrics = await redisClient.get<string>(cacheKey);
                 if (cachedMetrics) {

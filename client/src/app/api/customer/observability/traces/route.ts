@@ -6,7 +6,7 @@ import redisClient from "../../../../../lib/redisClient";
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { workspace_id, limit = 50, page = 1 } = body;
+        const { workspace_id, limit = 50, page = 1, refresh = false } = body;
 
         if (!workspace_id) {
             return NextResponse.json(
@@ -24,8 +24,8 @@ export async function POST(request: NextRequest) {
         const pageKey = `observability_traces:${workspace_id}:${page}:${limit}`;
         const trackerSetKey = `workspace_trace_keys:${workspace_id}`;
 
-        // 1. Check Redis Cache
-        if (redisClient) {
+        // 1. Check Redis Cache (bypassed if explicit refresh requested)
+        if (redisClient && !refresh) {
             try {
                 const cachedTraces = await redisClient.get<string>(pageKey);
                 if (cachedTraces) {
@@ -129,8 +129,9 @@ export async function DELETE(request: NextRequest) {
                 try {
                     const trackerSetKey = `workspace_trace_keys:${workspace_id}`;
                     const metricsKey = `observability_metrics:${workspace_id}`;
+                    const gapsKey = `observability_gaps:${workspace_id}`;
                     const historyKey = `chat_history:${session_id}`;
-                    const keysToDelete = [metricsKey, trackerSetKey, historyKey];
+                    const keysToDelete = [metricsKey, gapsKey, trackerSetKey, historyKey];
 
                     const registeredKeys = await redisClient.smembers(trackerSetKey);
                     if (registeredKeys && registeredKeys.length > 0) {
@@ -166,7 +167,8 @@ export async function DELETE(request: NextRequest) {
                 try {
                     const trackerSetKey = `workspace_trace_keys:${workspace_id}`;
                     const metricsKey = `observability_metrics:${workspace_id}`;
-                    const keysToDelete = [metricsKey, trackerSetKey];
+                    const gapsKey = `observability_gaps:${workspace_id}`;
+                    const keysToDelete = [metricsKey, gapsKey, trackerSetKey];
 
                     const registeredKeys = await redisClient.smembers(trackerSetKey);
                     if (registeredKeys && registeredKeys.length > 0) {

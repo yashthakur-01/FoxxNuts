@@ -8,6 +8,9 @@ import Skeleton from "../../components/ui/Skeleton";
 import Tabs from "../../components/ui/Tabs";
 import WorkspaceDropdown from "../../components/WorkspaceDropdown";
 import ChatInterface, { ChatMessage } from "../../components/ChatInterface";
+import PageHeader from "../../components/layout/PageHeader";
+import FoxMascotLoader from "../../components/ui/FoxMascotLoader";
+import { useChatHistory } from "../../hooks/useChat";
 
 export default function DashboardChatbotHome() {
   const supabase = createClient();
@@ -16,16 +19,21 @@ export default function DashboardChatbotHome() {
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isChatting, setIsChatting] = useState(false);
-  const [sessionId, setSessionId] = useState("");
+  const [sessionId, setSessionId] = useState<string>(() => {
+    if (typeof window !== "undefined" && activeWorkspaceId) {
+      return localStorage.getItem(`fn_dashboard_session_${activeWorkspaceId}`) || "";
+    }
+    return "";
+  });
   const [embedTab, setEmbedTab] = useState("html");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  // Initialize Session ID & Load Previous Chat History
+  // Initialize Session ID if needed
   useEffect(() => {
     if (!activeWorkspaceId) return;
 
-    let savedSid = "";
-    if (typeof window !== "undefined") {
+    let savedSid = sessionId;
+    if (!savedSid && typeof window !== "undefined") {
       savedSid = localStorage.getItem(`fn_dashboard_session_${activeWorkspaceId}`) || "";
       if (!savedSid) {
         savedSid = `session-${Math.random().toString(36).substring(2, 10)}`;
@@ -33,48 +41,25 @@ export default function DashboardChatbotHome() {
       }
       setSessionId(savedSid);
     }
+  }, [activeWorkspaceId, sessionId]);
 
-    const fetchHistory = async () => {
-      const welcomeMsg = activeWorkspace?.welcome_message || "Hello! How can I help you today?";
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.access_token && savedSid) {
-          const res = await fetch("/api/chat/getHistory", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: session.access_token,
-            },
-            body: JSON.stringify({
-              workspace_id: activeWorkspaceId,
-              session_id: savedSid,
-            }),
-          });
+  const { data: historyData } = useChatHistory(activeWorkspaceId, sessionId || null);
 
-          if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data.messages) && data.messages.length > 0) {
-              setMessages(data.messages);
-              return;
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load dashboard chat history:", err);
-      }
-
+  // Sync loaded history from TanStack Query
+  useEffect(() => {
+    if (historyData?.messages && historyData.messages.length > 0) {
+      setMessages(historyData.messages);
+    } else if (messages.length === 0) {
       setMessages([
         {
           id: "welcome",
           role: "ai",
-          content: welcomeMsg,
+          content: activeWorkspace?.welcome_message || "Hello! How can I help you today?",
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         },
       ]);
-    };
-
-    fetchHistory();
-  }, [activeWorkspaceId, activeWorkspace?.welcome_message]);
+    }
+  }, [historyData, activeWorkspace?.welcome_message]);
 
   const handleStartNewSession = () => {
     const newSid = `session-${Math.random().toString(36).substring(2, 10)}`;
@@ -242,46 +227,35 @@ export default function RootLayout({ children }) {
         ];
 
   if (wsLoading) {
-    return (
-      <div className="w-full h-full flex flex-col p-6 space-y-4">
-        <Skeleton height={48} width="35%" />
-        <Skeleton height={600} />
-      </div>
-    );
+    return <FoxMascotLoader variant="page" message="Connecting to interactive chat assistant..." />;
   }
 
   return (
     <div className="w-full h-full flex flex-col overflow-hidden animate-fn-fade-in font-sans">
-      {/* ============================================================
-          VIBRANT FULL-BLEED END-TO-END RED RIBBON HEADER
-          ============================================================ */}
-      <div className="w-full bg-gradient-to-r from-[#FF001E] via-[#FF1A35] to-[#E50914] text-white px-6 sm:px-8 py-4 sm:py-5 shadow-lg border-b border-red-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
-        <div className="space-y-1">
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            {chatbotName}
-          </h1>
-          <p className="text-xs sm:text-sm text-white/90 font-medium">
-            Workspace: <span className="font-bold text-white">{activeWorkspace?.workspace_name}</span> · Model: <span className="font-mono">{activeWorkspace?.model_name || "llama-3.3-70b"}</span>
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5">
-          <WorkspaceDropdown />
-          <span className="px-3 py-1.5 rounded-lg bg-black/40 text-white border border-white/20 text-xs font-mono">
-            Session: {sessionId.slice(0, 12)}
+      <PageHeader
+        title={chatbotName}
+        eyebrow="Interactive Chat Playground"
+        description={
+          <span>
+            Workspace: <span className="font-semibold text-[var(--fn-text)]">{activeWorkspace?.workspace_name}</span> · Model: <span className="font-mono text-[var(--fn-text)]">{activeWorkspace?.model_name || "llama-3.3-70b"}</span>
           </span>
+        }
+      >
+        <WorkspaceDropdown />
+        <span className="px-2.5 py-1.5 rounded-lg bg-[var(--fn-elevated)] border border-[var(--fn-border)] text-[var(--fn-text-secondary)] text-xs font-mono">
+          Session: {sessionId.slice(0, 10)}
+        </span>
 
-          <button
-            onClick={handleStartNewSession}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-black text-white hover:bg-neutral-900 border border-white/20 text-xs font-semibold transition-all shadow-md cursor-pointer active:scale-95"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-            </svg>
-            New Session
-          </button>
-        </div>
-      </div>
+        <button
+          onClick={handleStartNewSession}
+          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[var(--fn-elevated)] text-[var(--fn-text)] hover:bg-[var(--fn-surface)] border border-[var(--fn-border)] text-xs font-medium transition-all shadow-sm cursor-pointer active:scale-95"
+        >
+          <svg className="w-3.5 h-3.5 text-[var(--fn-text-tertiary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+          </svg>
+          Reset Session
+        </button>
+      </PageHeader>
 
       {/* Main Content Area: Scrollable Chatbot + Direct In-Page Embed Script */}
       <div className="flex-1 min-h-0 w-full overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-8">

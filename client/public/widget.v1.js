@@ -122,9 +122,45 @@
     }
   });
 
-  // ── PostMessage from iframe ───────────────────────────────────
+  // ── Global Controller API ──────────────────────────────────────
+  window.FoxxNuts = {
+    open: function () {
+      applyExpanded();
+      try {
+        if (iframe && iframe.contentWindow) {
+          iframe.contentWindow.postMessage({ type: "FOXXNUTS_OPEN" }, "*");
+        }
+      } catch (_) {}
+    },
+    close: function () {
+      applyCollapsed();
+      try {
+        if (iframe && iframe.contentWindow) {
+          iframe.contentWindow.postMessage({ type: "FOXXNUTS_CLOSE" }, "*");
+        }
+      } catch (_) {}
+    },
+    toggle: function () {
+      if (isOpen) {
+        window.FoxxNuts.close();
+      } else {
+        window.FoxxNuts.open();
+      }
+    },
+  };
+
+  // ── PostMessage from iframe & parent ───────────────────────────
   window.addEventListener("message", function (e) {
     try {
+      if (e.data && e.data.type === "FOXXNUTS_OPEN_WIDGET") {
+        window.FoxxNuts.open();
+        return;
+      }
+      if (e.data && e.data.type === "FOXXNUTS_CLOSE_WIDGET") {
+        window.FoxxNuts.close();
+        return;
+      }
+
       if (expectedOrigin && e.origin !== expectedOrigin) return;
       if (!e.data) return;
 
