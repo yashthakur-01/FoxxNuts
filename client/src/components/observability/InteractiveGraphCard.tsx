@@ -59,6 +59,14 @@ export default function InteractiveGraphCard({
     setHoverIndex(idx);
   };
 
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!containerRef.current || data.length <= 1 || e.touches.length === 0) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const xRatio = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
+    const idx = Math.round(xRatio * (data.length - 1));
+    setHoverIndex(idx);
+  };
+
   const handleMouseLeave = () => {
     setHoverIndex(null);
   };
@@ -121,6 +129,8 @@ export default function InteractiveGraphCard({
         ref={containerRef}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleMouseLeave}
         className="relative w-full h-[135px] pt-2 cursor-crosshair select-none"
       >
         <svg

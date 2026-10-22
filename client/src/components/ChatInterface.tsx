@@ -65,10 +65,30 @@ export default function ChatInterface({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isChatting]);
 
+  const MAX_INPUT_HEIGHT = 140; // Max vertical height (~5-6 lines)
+
+  // Dynamically control height and show scrollbar ONLY when max vertical height is reached
+  useEffect(() => {
+    if (!inputRef.current) return;
+    const el = inputRef.current;
+    if (!inputValue) {
+      el.style.height = "44px";
+      el.style.overflowY = "hidden";
+      return;
+    }
+    el.style.height = "auto";
+    const scrollHeight = el.scrollHeight;
+    if (scrollHeight > MAX_INPUT_HEIGHT) {
+      el.style.height = `${MAX_INPUT_HEIGHT}px`;
+      el.style.overflowY = "auto";
+    } else {
+      el.style.height = `${Math.max(44, scrollHeight)}px`;
+      el.style.overflowY = "hidden";
+    }
+  }, [inputValue]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputValue(e.target.value);
-    e.target.style.height = "auto";
-    e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`;
   };
 
   const handleSubmit = (e?: React.FormEvent) => {
@@ -80,6 +100,7 @@ export default function ChatInterface({
     setInputValue("");
     if (inputRef.current) {
       inputRef.current.style.height = "44px";
+      inputRef.current.style.overflowY = "hidden";
     }
   };
 
@@ -163,7 +184,7 @@ export default function ChatInterface({
           MESSAGES BODY (ENLARGED READABLE CHAT FONT)
           ============================================================ */}
       <main
-        className={`flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-5 transition-colors duration-200 ${
+        className={`flex-1 min-h-0 overflow-y-auto chat-scrollbar p-4 sm:p-6 space-y-5 transition-colors duration-200 ${
           isDark ? "bg-[#080808]" : "bg-gray-50"
         }`}
       >
@@ -274,11 +295,13 @@ export default function ChatInterface({
           rows={1}
           placeholder={placeholder}
           style={{
+            height: "44px",
+            overflowY: "hidden",
             borderColor: isInputFocused ? primaryColor : isDark ? "#262626" : "#E5E7EB",
             boxShadow: isInputFocused ? `0 0 0 1px ${primaryColor}40` : "none",
             outline: "none",
           }}
-          className={`flex-1 text-base px-4 py-3 rounded-xl border transition-all resize-none min-h-[44px] max-h-[140px] overflow-y-auto leading-relaxed ${
+          className={`flex-1 text-base px-4 py-2.5 rounded-xl border transition-all resize-none min-h-[44px] max-h-[140px] chat-input-scrollbar leading-relaxed ${
             isDark
               ? "bg-[#141414] text-white placeholder-neutral-500"
               : "bg-gray-50 text-gray-900 placeholder-gray-400"

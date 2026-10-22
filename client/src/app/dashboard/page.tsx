@@ -264,7 +264,7 @@ export default function RootLayout({ children }) {
           {/* ============================================================
               1. DIRECT INTERACTIVE CHATBOT WINDOW (INTERNAL SCROLL)
               ============================================================ */}
-          <div className="w-full h-[620px] max-h-[calc(100vh-16rem)] min-h-[480px] flex flex-col">
+          <div className="w-full h-[520px] sm:h-[620px] max-h-[calc(100vh-16rem)] min-h-[420px] flex flex-col">
             <ChatInterface
               config={{
                 chatbot_name: chatbotName,
@@ -285,7 +285,7 @@ export default function RootLayout({ children }) {
           {/* ============================================================
               2. DIRECT IN-PAGE EMBED SCRIPT & CODE INTEGRATION PANEL
               ============================================================ */}
-          <div className="border border-[var(--fn-border)] rounded-2xl bg-[var(--fn-surface)] shadow-lg overflow-hidden space-y-6 p-6 sm:p-7">
+          <div className="border border-[var(--fn-border)] rounded-2xl bg-[var(--fn-surface)] shadow-lg overflow-hidden space-y-5 sm:space-y-6 p-4 sm:p-6 lg:p-7">
             <div className="border-b border-[var(--fn-border)] pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-red-500/10 text-red-500 border border-red-500/20 flex items-center justify-center font-bold text-sm">
@@ -326,7 +326,7 @@ export default function RootLayout({ children }) {
 
             {/* Snippet Tabs */}
             <div className="border border-[var(--fn-border)] rounded-xl overflow-hidden bg-[var(--fn-elevated)]/40">
-              <div className="px-4 py-2.5 border-b border-[var(--fn-border)] bg-[var(--fn-elevated)] flex items-center justify-between">
+              <div className="px-3.5 sm:px-4 py-2.5 border-b border-[var(--fn-border)] bg-[var(--fn-elevated)] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                 <Tabs
                   tabs={[
                     { id: "html", label: "HTML Script" },
@@ -344,7 +344,7 @@ export default function RootLayout({ children }) {
                       "inpage-snippet"
                     )
                   }
-                  className="px-3.5 py-1.5 rounded-lg bg-black text-white hover:bg-neutral-900 border border-white/20 text-xs font-semibold transition-all cursor-pointer shadow-xs active:scale-95"
+                  className="px-3.5 py-1.5 rounded-lg bg-black text-white hover:bg-neutral-900 border border-white/20 text-xs font-semibold transition-all cursor-pointer shadow-xs active:scale-95 shrink-0 self-end sm:self-auto"
                 >
                   {copiedKey === "inpage-snippet" ? "✓ Copied" : "Copy Code"}
                 </button>

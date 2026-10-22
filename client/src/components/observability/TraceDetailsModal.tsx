@@ -78,11 +78,11 @@ export default function TraceDetailsModal({
         </div>
       }
       footer={
-        <div className="w-full flex items-center justify-between">
-          <span className="text-xs font-mono text-[var(--fn-text-tertiary)]">
+        <div className="w-full flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <span className="text-xs font-mono text-[var(--fn-text-tertiary)] truncate max-w-full">
             Trace ID: {selectedTrace.id || "N/A"}
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
             <Button
               variant="danger"
               size="sm"

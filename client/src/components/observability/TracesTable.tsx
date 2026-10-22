@@ -51,7 +51,7 @@ export default function TracesTable({
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-[var(--fn-text)]">
+          <table className="min-w-[760px] w-full text-left text-sm text-[var(--fn-text)]">
             <thead>
               <tr className="border-b border-[var(--fn-border)] bg-[var(--fn-elevated)]/60 text-[11px] font-medium text-[var(--fn-text-tertiary)] uppercase tracking-wider">
                 <th className="p-3.5">Time</th>

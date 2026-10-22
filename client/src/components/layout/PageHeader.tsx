@@ -28,7 +28,7 @@ export default function PageHeader({
 }: PageHeaderProps) {
   return (
     <div
-      className={`w-full bg-[var(--fn-surface)]/80 backdrop-blur-md border-b border-[var(--fn-border)] px-6 sm:px-8 py-4 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0 transition-colors ${className}`}
+      className={`w-full bg-[var(--fn-surface)]/80 backdrop-blur-md border-b border-[var(--fn-border)] px-4 sm:px-6 md:px-8 py-3.5 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0 transition-colors ${className}`}
     >
       <div className="space-y-1 min-w-0">
         {eyebrow && (
@@ -40,7 +40,7 @@ export default function PageHeader({
           {title}
         </h1>
         {description && (
-          <div className="text-xs sm:text-sm text-[var(--fn-text-secondary)] font-normal leading-relaxed truncate">
+          <div className="text-xs sm:text-sm text-[var(--fn-text-secondary)] font-normal leading-relaxed line-clamp-2 sm:line-clamp-none">
             {description}
           </div>
         )}

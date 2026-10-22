@@ -53,10 +53,29 @@ export default function ChatbotStylingConfigPage() {
   const previewEndRef = useRef<HTMLDivElement>(null);
   const previewInputRef = useRef<HTMLTextAreaElement>(null);
 
+  const MAX_PREVIEW_HEIGHT = 130; // ~5-6 lines
+
+  useEffect(() => {
+    if (!previewInputRef.current) return;
+    const el = previewInputRef.current;
+    if (!previewInput) {
+      el.style.height = "44px";
+      el.style.overflowY = "hidden";
+      return;
+    }
+    el.style.height = "auto";
+    const scrollHeight = el.scrollHeight;
+    if (scrollHeight > MAX_PREVIEW_HEIGHT) {
+      el.style.height = `${MAX_PREVIEW_HEIGHT}px`;
+      el.style.overflowY = "auto";
+    } else {
+      el.style.height = `${Math.max(44, scrollHeight)}px`;
+      el.style.overflowY = "hidden";
+    }
+  }, [previewInput]);
+
   const handlePreviewInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setPreviewInput(e.target.value);
-    e.target.style.height = "auto";
-    e.target.style.height = `${Math.min(e.target.scrollHeight, 110)}px`;
   };
 
   // Populate from activeWorkspace
@@ -144,7 +163,8 @@ export default function ChatbotStylingConfigPage() {
     if (!customText) {
       setPreviewInput("");
       if (previewInputRef.current) {
-        previewInputRef.current.style.height = "38px";
+        previewInputRef.current.style.height = "44px";
+        previewInputRef.current.style.overflowY = "hidden";
       }
     }
     setIsPreviewChatting(true);
@@ -237,12 +257,12 @@ export default function ChatbotStylingConfigPage() {
       </PageHeader>
 
       {/* 50/50 Split Screen: Left Scrollable Settings | Right Fixed Live Chatbot */}
-      <div className="w-full flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch p-5 sm:p-7 overflow-hidden">
+      <div className="w-full flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch p-4 sm:p-6 lg:p-7 overflow-y-auto lg:overflow-hidden">
         {/* ============================================================
             LEFT HALF: INDEPENDENTLY SCROLLABLE FORM
             ============================================================ */}
-        <div className="lg:col-span-7 h-full flex flex-col overflow-hidden min-h-0 bg-[var(--fn-surface)] border border-[var(--fn-border)] rounded-2xl p-6 shadow-sm">
-          <div className="flex-1 min-h-0 overflow-y-auto pr-3 space-y-6 no-scrollbar">
+        <div className="lg:col-span-7 h-auto lg:h-full flex flex-col overflow-visible lg:overflow-hidden min-h-0 bg-[var(--fn-surface)] border border-[var(--fn-border)] rounded-2xl p-4 sm:p-6 shadow-sm">
+          <div className="flex-1 min-h-0 overflow-y-visible lg:overflow-y-auto pr-0 lg:pr-3 space-y-6 no-scrollbar">
             {/* Identity Group */}
             <div className="space-y-4">
               <div className="border-b border-[var(--fn-border)] pb-2.5">
@@ -444,7 +464,7 @@ export default function ChatbotStylingConfigPage() {
         {/* ============================================================
             RIGHT HALF: FIXED LIVE CHATBOT SANDBOX
             ============================================================ */}
-        <div className="lg:col-span-5 h-full flex flex-col space-y-2 overflow-hidden min-h-0">
+        <div className="lg:col-span-5 h-[540px] sm:h-[600px] lg:h-full flex flex-col space-y-2 overflow-hidden min-h-0 shrink-0">
           <div className="flex items-center justify-between px-1 shrink-0">
             <span className="text-xs font-bold text-[var(--fn-text)] flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -507,7 +527,7 @@ export default function ChatbotStylingConfigPage() {
 
             {/* Messages Scroll Area */}
             <div
-              className={`flex-1 min-h-0 overflow-y-auto p-5 space-y-4 transition-colors duration-200 ${
+              className={`flex-1 min-h-0 overflow-y-auto chat-scrollbar p-5 space-y-4 transition-colors duration-200 ${
                 isDarkPreview ? "bg-[#080808]" : "bg-gray-50"
               }`}
             >
@@ -631,11 +651,12 @@ export default function ChatbotStylingConfigPage() {
                 disabled={isPreviewChatting}
                 style={{
                   height: "44px",
+                  overflowY: "hidden",
                   borderColor: isInputFocused ? primaryColor : (isDarkPreview ? "#2A2A2A" : "#E5E7EB"),
                   boxShadow: isInputFocused ? `0 0 0 1px ${primaryColor}40` : "none",
                   outline: "none",
                 }}
-                className={`flex-1 border text-sm rounded-[var(--fn-radius)] px-4 py-2.5 transition-all font-medium resize-none min-h-[44px] max-h-[128px] overflow-y-auto leading-relaxed ${
+                className={`flex-1 border text-sm rounded-[var(--fn-radius)] px-4 py-2.5 transition-all font-medium resize-none min-h-[44px] max-h-[130px] chat-input-scrollbar leading-relaxed ${
                   isDarkPreview
                     ? "bg-[#141414] text-white placeholder:text-neutral-500"
                     : "bg-gray-50 text-gray-900 placeholder:text-gray-400"

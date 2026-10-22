@@ -470,7 +470,7 @@ export default function KnowledgePage() {
       />
 
       {/* Main Content Scroll Area */}
-      <div className="flex-1 min-h-0 w-full overflow-y-auto p-5 sm:p-8 space-y-6">
+      <div className="flex-1 min-h-0 w-full overflow-y-auto p-4 sm:p-6 md:p-8 space-y-5 sm:space-y-6">
         <div className="max-w-7xl mx-auto space-y-6">
 
       {/* Filter & Search Bar */}
@@ -568,36 +568,37 @@ export default function KnowledgePage() {
             }}
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-[var(--fn-border)] bg-[var(--fn-elevated)]/50 text-[11px] font-medium text-[var(--fn-text-tertiary)] uppercase tracking-wider">
-                  <th className="py-3 px-4">Document</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 hidden md:table-cell">Added</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--fn-border)]">
-                {filteredFiles.map((file) => (
-                  <tr
-                    key={file.file_id}
-                    className="hover:bg-[var(--fn-elevated)]/40 transition-colors group"
-                  >
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-3">
-                        {getFileIcon(file.file_name)}
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-[var(--fn-text)] truncate max-w-[240px] sm:max-w-xs md:max-w-sm">
-                            {file.file_name}
-                          </p>
-                          <p className="text-[11px] text-[var(--fn-text-tertiary)] font-mono truncate max-w-[200px]">
-                            {file.file_id}
-                          </p>
-                        </div>
+          <>
+            {/* Mobile Cards View (< sm) */}
+            <div className="block sm:hidden divide-y divide-[var(--fn-border)]">
+              {filteredFiles.map((file) => (
+                <div key={file.file_id} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      {getFileIcon(file.file_name)}
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-[var(--fn-text)] truncate" title={file.file_name}>
+                          {file.file_name}
+                        </p>
+                        <p className="text-[11px] text-[var(--fn-text-tertiary)] font-mono truncate">
+                          {file.file_id}
+                        </p>
                       </div>
-                    </td>
-                    <td className="py-3 px-4">
+                    </div>
+
+                    <button
+                      onClick={() => setConfirmDeleteFile(file)}
+                      className="p-1.5 rounded-[var(--fn-radius-sm)] text-[var(--fn-text-tertiary)] hover:text-[var(--fn-error)] hover:bg-[var(--fn-error)]/10 transition-colors cursor-pointer shrink-0"
+                      title="Delete file"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs pt-2 border-t border-[var(--fn-border)]/50">
+                    <div className="flex items-center gap-2">
                       <Badge
                         variant={
                           file.status === "completed"
@@ -618,39 +619,112 @@ export default function KnowledgePage() {
                           ? "Failed"
                           : "Uploaded"}
                       </Badge>
-                    </td>
-                    <td className="py-3 px-4 text-xs text-[var(--fn-text-secondary)] hidden md:table-cell">
-                      {formatDate(file.created_at)}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {file.status === "failed" && (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => handleReprocess(file.file_id)}
-                            disabled={reprocessingId === file.file_id}
-                            loading={reprocessingId === file.file_id}
-                          >
-                            Retry
-                          </Button>
-                        )}
-                        <button
-                          onClick={() => setConfirmDeleteFile(file)}
-                          className="p-1.5 rounded-[var(--fn-radius-sm)] text-[var(--fn-text-tertiary)] hover:text-[var(--fn-error)] hover:bg-[var(--fn-error)]/10 transition-colors cursor-pointer"
-                          title="Delete file"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                          </svg>
-                        </button>
-                      </div>
-                    </td>
+                      <span className="text-[11px] text-[var(--fn-text-tertiary)]">
+                        {formatDate(file.created_at)}
+                      </span>
+                    </div>
+
+                    {file.status === "failed" && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => handleReprocess(file.file_id)}
+                        disabled={reprocessingId === file.file_id}
+                        loading={reprocessingId === file.file_id}
+                      >
+                        Retry
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table View (>= sm) */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-[var(--fn-border)] bg-[var(--fn-elevated)]/50 text-[11px] font-medium text-[var(--fn-text-tertiary)] uppercase tracking-wider">
+                    <th className="py-3 px-4">Document</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4 hidden md:table-cell">Added</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-[var(--fn-border)]">
+                  {filteredFiles.map((file) => (
+                    <tr
+                      key={file.file_id}
+                      className="hover:bg-[var(--fn-elevated)]/40 transition-colors group"
+                    >
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-3">
+                          {getFileIcon(file.file_name)}
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-[var(--fn-text)] truncate max-w-[240px] sm:max-w-xs md:max-w-sm">
+                              {file.file_name}
+                            </p>
+                            <p className="text-[11px] text-[var(--fn-text-tertiary)] font-mono truncate max-w-[200px]">
+                              {file.file_id}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <Badge
+                          variant={
+                            file.status === "completed"
+                              ? "success"
+                              : file.status === "processing"
+                              ? "warning"
+                              : file.status === "failed"
+                              ? "error"
+                              : "info"
+                          }
+                          dot
+                        >
+                          {file.status === "completed"
+                            ? "Indexed"
+                            : file.status === "processing"
+                            ? "Processing"
+                            : file.status === "failed"
+                            ? "Failed"
+                            : "Uploaded"}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-4 text-xs text-[var(--fn-text-secondary)] hidden md:table-cell">
+                        {formatDate(file.created_at)}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {file.status === "failed" && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => handleReprocess(file.file_id)}
+                              disabled={reprocessingId === file.file_id}
+                              loading={reprocessingId === file.file_id}
+                            >
+                              Retry
+                            </Button>
+                          )}
+                          <button
+                            onClick={() => setConfirmDeleteFile(file)}
+                            className="p-1.5 rounded-[var(--fn-radius-sm)] text-[var(--fn-text-tertiary)] hover:text-[var(--fn-error)] hover:bg-[var(--fn-error)]/10 transition-colors cursor-pointer"
+                            title="Delete file"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

@@ -33,7 +33,7 @@ export default function AnalyticsTracesPage() {
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 min-h-0 w-full overflow-y-auto p-5 sm:p-8">
+      <div className="flex-1 min-h-0 w-full overflow-y-auto p-4 sm:p-6 md:p-8">
         <div className="max-w-7xl mx-auto space-y-6">
           <ObservabilitySection
             workspaceId={activeWorkspaceId}

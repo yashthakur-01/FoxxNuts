@@ -36,7 +36,7 @@ export default function SessionChatThread({
         className={`
           ${selectedSessionId ? "hidden lg:flex" : "flex"}
           lg:col-span-4 bg-[var(--fn-surface)] border border-[var(--fn-border)] rounded-[var(--fn-radius-lg)]
-          flex-col h-[65vh] min-h-[480px] overflow-hidden
+          flex-col h-[72vh] sm:h-[65vh] min-h-[420px] overflow-hidden
         `}
       >
         <div className="p-3.5 border-b border-[var(--fn-border)] flex items-center justify-between shrink-0 bg-[var(--fn-elevated)]/40">
@@ -142,7 +142,7 @@ export default function SessionChatThread({
         className={`
           ${!selectedSessionId ? "hidden lg:flex" : "flex"}
           lg:col-span-8 bg-[var(--fn-surface)] border border-[var(--fn-border)] rounded-[var(--fn-radius-lg)]
-          flex-col h-[65vh] min-h-[480px] overflow-hidden
+          flex-col h-[72vh] sm:h-[65vh] min-h-[420px] overflow-hidden
         `}
       >
         {currentSelectedSession ? (
@@ -198,7 +198,7 @@ export default function SessionChatThread({
             </div>
 
             {/* Messages Thread */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-6">
+            <div className="flex-1 overflow-y-auto chat-scrollbar p-3.5 sm:p-5 space-y-4 sm:space-y-6">
               {currentSelectedSession.traces.map((trace, idx) => {
                 const pairs = Array.isArray(trace.query_context_pairs) ? trace.query_context_pairs : [];
 
@@ -206,7 +206,7 @@ export default function SessionChatThread({
                   <div key={trace.id} className="space-y-3">
                     {/* User Query Turn */}
                     <div className="flex justify-end">
-                      <div className="max-w-[85%] rounded-[var(--fn-radius-lg)] rounded-br-xs px-4 py-3 bg-[var(--fn-accent)] text-white text-sm shadow-xs">
+                      <div className="max-w-[92%] sm:max-w-[85%] rounded-[var(--fn-radius-lg)] rounded-br-xs px-3.5 sm:px-4 py-2.5 sm:py-3 bg-[var(--fn-accent)] text-white text-sm shadow-xs">
                         <p className="font-medium whitespace-pre-wrap">{trace.query}</p>
                         <span className="text-[10px] text-white/70 mt-1 block text-right">
                           Turn #{idx + 1} · {new Date(trace.created_at).toLocaleTimeString()}
@@ -216,7 +216,7 @@ export default function SessionChatThread({
 
                     {/* AI Response Turn */}
                     <div className="flex justify-start">
-                      <div className="max-w-[90%] rounded-[var(--fn-radius-lg)] rounded-bl-xs px-4 py-3.5 bg-[var(--fn-elevated)] border border-[var(--fn-border)] text-[var(--fn-text)] text-sm space-y-3 shadow-xs">
+                      <div className="max-w-[96%] sm:max-w-[90%] rounded-[var(--fn-radius-lg)] rounded-bl-xs px-3.5 sm:px-4 py-3 sm:py-3.5 bg-[var(--fn-elevated)] border border-[var(--fn-border)] text-[var(--fn-text)] text-sm space-y-3 shadow-xs">
                         <MarkdownRenderer content={trace.final_response} />
 
                         {/* Micro telemetry tag bar & Inspect Action */}

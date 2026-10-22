@@ -48,7 +48,7 @@ export default function Modal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 overflow-hidden">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-[var(--fn-overlay)] backdrop-blur-xs animate-fn-fade-in"
@@ -67,7 +67,7 @@ export default function Modal({
       >
         {/* Header */}
         {title && (
-          <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--fn-border)] bg-[var(--fn-surface)] shrink-0 select-none">
+          <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-[var(--fn-border)] bg-[var(--fn-surface)] shrink-0 select-none">
             <div className="text-base font-bold text-[var(--fn-text)] tracking-tight">
               {title}
             </div>
@@ -84,13 +84,13 @@ export default function Modal({
         )}
 
         {/* Scrollable Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-5">
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4 sm:py-5 space-y-4 sm:space-y-5">
           {children}
         </div>
 
         {/* Footer */}
         {footer && (
-          <div className="px-6 py-3.5 border-t border-[var(--fn-border)] bg-[var(--fn-surface)] flex items-center justify-end gap-3 shrink-0">
+          <div className="px-4 sm:px-6 py-3 sm:py-3.5 border-t border-[var(--fn-border)] bg-[var(--fn-surface)] flex flex-wrap items-center justify-end gap-2.5 sm:gap-3 shrink-0">
             {footer}
           </div>
         )}

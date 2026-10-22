@@ -222,12 +222,12 @@ export default function WorkspaceSettingsPage() {
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 min-h-0 w-full overflow-y-auto p-5 sm:p-8 space-y-6">
+      <div className="flex-1 min-h-0 w-full overflow-y-auto p-4 sm:p-6 md:p-8 space-y-5 sm:space-y-6">
         <div className="max-w-4xl mx-auto space-y-6">
 
           {/* If No Workspace is set / active */}
           {!activeWorkspace && (
-            <div className="p-8 border border-[var(--fn-border)] rounded-2xl bg-[var(--fn-surface)] text-center space-y-4 shadow-sm">
+            <div className="p-6 sm:p-8 border border-[var(--fn-border)] rounded-2xl bg-[var(--fn-surface)] text-center space-y-4 shadow-sm">
               <div className="w-12 h-12 rounded-2xl bg-[var(--fn-accent)]/10 text-[var(--fn-accent)] flex items-center justify-center text-2xl mx-auto shadow-xs">
                 🏢
               </div>
@@ -251,7 +251,7 @@ export default function WorkspaceSettingsPage() {
           {activeWorkspace && (
             <>
               {/* Switcher & Create Workspace Bar */}
-              <div className="p-5 border border-[var(--fn-border)] rounded-2xl bg-[var(--fn-surface)] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+              <div className="p-4 sm:p-5 border border-[var(--fn-border)] rounded-2xl bg-[var(--fn-surface)] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
                 <div>
                   <h3 className="text-sm font-bold text-[var(--fn-text)]">Active Workspace</h3>
                   <p className="text-xs text-[var(--fn-text-secondary)] mt-0.5">
@@ -259,11 +259,11 @@ export default function WorkspaceSettingsPage() {
                   </p>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3">
                   <select
                     value={activeWorkspaceId || ""}
                     onChange={(e) => setActiveWorkspaceId(e.target.value)}
-                    className="bg-[var(--fn-elevated)] border border-[var(--fn-border)] text-[var(--fn-text)] text-xs rounded-[var(--fn-radius)] px-3.5 py-2.5 focus:outline-none focus:border-[var(--fn-accent)] font-medium cursor-pointer"
+                    className="w-full sm:w-auto bg-[var(--fn-elevated)] border border-[var(--fn-border)] text-[var(--fn-text)] text-xs rounded-[var(--fn-radius)] px-3.5 py-2.5 focus:outline-none focus:border-[var(--fn-accent)] font-medium cursor-pointer"
                   >
                     {workspaces.map((w) => (
                       <option key={w.id} value={w.id}>
@@ -274,6 +274,7 @@ export default function WorkspaceSettingsPage() {
 
                   <Button
                     size="sm"
+                    className="w-full sm:w-auto"
                     onClick={() => setShowCreateModal(true)}
                     icon={
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -287,7 +288,7 @@ export default function WorkspaceSettingsPage() {
               </div>
 
               {/* General Settings Form */}
-              <form onSubmit={handleSaveGeneral} className="p-6 border border-[var(--fn-border)] rounded-2xl bg-[var(--fn-surface)] space-y-5 shadow-sm">
+              <form onSubmit={handleSaveGeneral} className="p-4 sm:p-6 border border-[var(--fn-border)] rounded-2xl bg-[var(--fn-surface)] space-y-5 shadow-sm">
                 <div className="border-b border-[var(--fn-border)] pb-3">
                   <h3 className="text-sm font-bold text-[var(--fn-text)] flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-[var(--fn-accent)]" />
@@ -331,7 +332,7 @@ export default function WorkspaceSettingsPage() {
               </form>
 
               {/* Security & Allowed Domains */}
-              <form onSubmit={handleSaveGeneral} className="p-6 border border-[var(--fn-border)] rounded-2xl bg-[var(--fn-surface)] space-y-4 shadow-sm">
+              <form onSubmit={handleSaveGeneral} className="p-4 sm:p-6 border border-[var(--fn-border)] rounded-2xl bg-[var(--fn-surface)] space-y-4 shadow-sm">
                 <div className="border-b border-[var(--fn-border)] pb-3">
                   <h3 className="text-sm font-bold text-[var(--fn-text)] flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-cyan-400" />
@@ -358,7 +359,7 @@ export default function WorkspaceSettingsPage() {
               </form>
 
               {/* Danger Zone */}
-              <div className="p-6 border border-[var(--fn-error)]/25 rounded-2xl bg-[var(--fn-surface)] space-y-4 shadow-sm">
+              <div className="p-4 sm:p-6 border border-[var(--fn-error)]/25 rounded-2xl bg-[var(--fn-surface)] space-y-4 shadow-sm">
                 <div className="border-b border-[var(--fn-border)] pb-3">
                   <h3 className="text-sm font-bold text-[var(--fn-error)] flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-[var(--fn-error)]" />
@@ -382,6 +383,7 @@ export default function WorkspaceSettingsPage() {
                   <Button
                     variant="danger"
                     size="sm"
+                    className="w-full sm:w-auto shrink-0"
                     onClick={() => {
                       setConfirmWsName("");
                       setShowDeleteModal(true);

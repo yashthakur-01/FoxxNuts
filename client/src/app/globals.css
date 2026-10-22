@@ -115,12 +115,48 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--fn-border);
-  border-radius: 3px;
+  background: #D1D5DB;
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--fn-text-tertiary);
+  background: #9CA3AF;
+}
+
+/* ============================================================
+   Light Gray Scrollbars for Chat & Textarea Input
+   ============================================================ */
+.chat-scrollbar,
+.chat-input-scrollbar,
+textarea {
+  scrollbar-width: thin;
+  scrollbar-color: #D1D5DB transparent;
+}
+
+.chat-scrollbar::-webkit-scrollbar,
+.chat-input-scrollbar::-webkit-scrollbar,
+textarea::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.chat-scrollbar::-webkit-scrollbar-track,
+.chat-input-scrollbar::-webkit-scrollbar-track,
+textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-scrollbar::-webkit-scrollbar-thumb,
+.chat-input-scrollbar::-webkit-scrollbar-thumb,
+textarea::-webkit-scrollbar-thumb {
+  background-color: #D1D5DB !important;
+  border-radius: 9999px;
+}
+
+.chat-scrollbar::-webkit-scrollbar-thumb:hover,
+.chat-input-scrollbar::-webkit-scrollbar-thumb:hover,
+textarea::-webkit-scrollbar-thumb:hover {
+  background-color: #9CA3AF !important;
 }
 
 /* ============================================================
