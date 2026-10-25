@@ -46,6 +46,7 @@ services:
         --concurrency=1
         --without-gossip
         --without-mingle
+        --without-heartbeat
     env_file:
       - ./rag-backend/server/.env
     depends_on:

@@ -187,7 +187,7 @@ def delete_document_task(self, file_name: str, customer_id: str, workspace_id: s
         raise self.retry(exc=exc, countdown=10)
 
 
-@celery_app.task(bind=True, max_retries=1)
+@celery_app.task(bind=True, max_retries=1, ignore_result=False)
 def delete_workspace_task(self, customer_id: str, workspace_id: str):
     """
     Celery background task for deleting an entire workspace:

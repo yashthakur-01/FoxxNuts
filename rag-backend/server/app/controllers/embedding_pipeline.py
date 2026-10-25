@@ -41,12 +41,34 @@ def get_bm25_encoder():
     
     print("  [BM25 Init] Initializing BM25Encoder...")
     t0 = time.time()
-    try:
-        encoder = BM25Encoder().default()
-        print(f"  [BM25 Init] BM25Encoder.default() loaded in {time.time() - t0:.2f}s")
-    except Exception as bm25_err:
-        print(f"  ⚠️ [BM25 Init] Failed to load remote default BM25 model ({bm25_err}), falling back to local BM25Encoder...")
-        encoder = BM25Encoder()
+
+    # Determine persistent local cache path
+    cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_file = os.path.join(cache_dir, "bm25_default.json")
+
+    encoder = None
+    if os.path.exists(cache_file) and os.path.getsize(cache_file) > 0:
+        try:
+            encoder = BM25Encoder().load(cache_file)
+            print(f"  [BM25 Init] Loaded BM25Encoder from local disk cache ({cache_file}) in {time.time() - t0:.2f}s")
+        except Exception as load_err:
+            print(f"  ⚠️ [BM25 Init] Local cache read failed ({load_err}), will re-download...")
+            encoder = None
+
+    if encoder is None:
+        try:
+            encoder = BM25Encoder().default()
+            print(f"  [BM25 Init] BM25Encoder.default() downloaded in {time.time() - t0:.2f}s")
+            try:
+                encoder.dump(cache_file)
+                print(f"  [BM25 Init] Cached default BM25 model to disk at {cache_file}")
+            except Exception as dump_err:
+                print(f"  ⚠️ [BM25 Init] Could not save BM25 cache to disk: {dump_err}")
+        except Exception as bm25_err:
+            print(f"  ⚠️ [BM25 Init] Failed to load remote default BM25 model ({bm25_err}), falling back to local BM25Encoder...")
+            encoder = BM25Encoder()
+
     _CACHED_BM25_ENCODER = encoder
     return _CACHED_BM25_ENCODER
 

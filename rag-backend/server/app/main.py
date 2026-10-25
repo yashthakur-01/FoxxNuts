@@ -1,5 +1,6 @@
 import os
 import time
+import asyncio
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
@@ -14,6 +15,23 @@ load_dotenv()
 
 FASTAPI_SECRET_KEY = os.getenv("FASTAPI_SECRET_KEY")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
+async def _warm_up_retrieval_models():
+    """Pre-warms BM25 and vector embedding models in the background to eliminate cold-start latency."""
+    try:
+        from app.controllers.embedding_pipeline import (
+            get_bm25_encoder,
+            get_embedding_model,
+            get_pinecone_index,
+        )
+        print("⏳ [Model Pre-warm] Pre-warming embedding and BM25 search models in background...")
+        t0 = time.time()
+        await asyncio.to_thread(get_bm25_encoder)
+        await asyncio.to_thread(get_embedding_model)
+        await asyncio.to_thread(get_pinecone_index)
+        print(f"🟢 [Model Pre-warm] All models initialized and ready in memory ({time.time() - t0:.2f}s)!")
+    except Exception as e:
+        print(f"🟡 [Model Pre-warm Notice] Pre-warming deferred: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,8 +54,10 @@ async def lifespan(app: FastAPI):
     print("   • delete_document_task    (Vector purge & File cleanup)")
     print("   • delete_workspace_task   (Full Workspace & File Deletion)")
 
+    # 3. Asynchronously pre-warm vector & BM25 models in background without blocking server startup
+    asyncio.create_task(_warm_up_retrieval_models())
 
-    # 3. FastAPI HTTP Server
+    # 4. FastAPI HTTP Server
     print("🟢 [FastAPI Server] Application started and listening for requests.")
     print("=" * 65)
 

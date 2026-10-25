@@ -45,12 +45,17 @@ celery_config = {
     "accept_content": ["json"],
     "timezone": "UTC",
     "enable_utc": True,
-    "task_track_started": True,
+    "task_ignore_result": True,
+    "task_track_started": False,
+    "task_store_errors_even_if_ignored": False,
+    "worker_enable_remote_control": False,
+    "worker_send_task_events": False,
+    "result_expires": 180,
     "imports": ["app.tasks"],
 }
 
 celery_config["broker_transport_options"] = {
-    "polling_interval": 10,
+    "polling_interval": 40,
     "visibility_timeout": 3600,
 }
 
