@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  if (window.__foxxnuts_widget_loaded) return;
+  if (window.__foxxnuts_widget_loaded && document.getElementById("foxxnuts-widget")) return;
   window.__foxxnuts_widget_loaded = true;
 
   var scriptTag =
@@ -35,13 +35,62 @@
   var M = 20;
   var isOpen = false;
 
+  var originalHtmlOverflow = "";
+  var originalBodyOverflow = "";
+  var originalTouchAction = "";
+  var isScrollLocked = false;
+
+  function lockHostScroll() {
+    if (isScrollLocked) return;
+    originalHtmlOverflow = document.documentElement.style.overflow;
+    originalBodyOverflow = document.body.style.overflow;
+    originalTouchAction = document.body.style.touchAction;
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+    isScrollLocked = true;
+  }
+
+  function unlockHostScroll() {
+    if (!isScrollLocked) return;
+    document.documentElement.style.overflow = originalHtmlOverflow;
+    document.body.style.overflow = originalBodyOverflow;
+    document.body.style.touchAction = originalTouchAction;
+    isScrollLocked = false;
+  }
+
   // ── Container ─────────────────────────────────────────────────
   var el = document.createElement("div");
   el.id = "foxxnuts-widget";
   applyCollapsed();
 
+  function syncMobileViewport() {
+    if (!isOpen) return;
+    var isMobile = window.innerWidth <= 640;
+    if (!isMobile) return;
+
+    var vv = window.visualViewport;
+    var height = vv ? Math.round(vv.height) : (window.innerHeight || document.documentElement.clientHeight);
+    var width = vv ? Math.round(vv.width) : (window.innerWidth || document.documentElement.clientWidth);
+    var top = vv ? Math.round(vv.offsetTop) : 0;
+    var left = vv ? Math.round(vv.offsetLeft) : 0;
+
+    el.style.position = "fixed";
+    el.style.top = top + "px";
+    el.style.left = left + "px";
+    el.style.bottom = "auto";
+    el.style.right = "auto";
+    el.style.width = width + "px";
+    el.style.height = height + "px";
+    el.style.maxHeight = height + "px";
+    el.style.borderRadius = "0px";
+    el.style.boxShadow = "none";
+    el.style.transition = "none";
+  }
+
   function applyCollapsed() {
     isOpen = false;
+    unlockHostScroll();
     el.style.position = "fixed";
     el.style.zIndex = "2147483647";
     el.style.border = "none";
@@ -65,16 +114,10 @@
     isOpen = true;
     var isMobile = window.innerWidth <= 640;
     if (isMobile) {
-      el.style.position = "fixed";
-      el.style.top = "0px";
-      el.style.bottom = "0px";
-      el.style.left = "0px";
-      el.style.right = "0px";
-      el.style.width = "100vw";
-      el.style.height = "100vh";
-      el.style.maxHeight = "100vh";
-      el.style.borderRadius = "0px";
+      lockHostScroll();
+      syncMobileViewport();
     } else {
+      unlockHostScroll();
       el.style.position = "fixed";
       el.style.top = "16px";
       el.style.bottom = "16px";
@@ -84,8 +127,10 @@
       el.style.height = "calc(100vh - 32px)";
       el.style.maxHeight = "calc(100vh - 32px)";
       el.style.borderRadius = "16px";
+      el.style.boxShadow = "0 12px 48px rgba(0,0,0,0.35)";
+      el.style.transition =
+        "width .3s cubic-bezier(0.16, 1, 0.3, 1), height .3s cubic-bezier(0.16, 1, 0.3, 1), top .3s cubic-bezier(0.16, 1, 0.3, 1), bottom .3s cubic-bezier(0.16, 1, 0.3, 1), border-radius .3s ease, box-shadow .3s ease";
     }
-    el.style.boxShadow = "0 12px 48px rgba(0,0,0,0.35)";
   }
 
   // ── Iframe ────────────────────────────────────────────────────
@@ -94,7 +139,7 @@
   iframe.title = "FoxxNuts AI Chatbot";
   iframe.allow = "clipboard-write";
   iframe.style.cssText =
-    "width:100%;height:100%;border:none;background:transparent;color-scheme:auto;";
+    "display:block;width:100%;height:100%;border:none;margin:0;padding:0;background:transparent;color-scheme:auto;";
 
   el.appendChild(iframe);
 
@@ -115,12 +160,32 @@
     expectedOrigin = "";
   }
 
-  // ── Window Resize Handler (Keep mobile vs desktop responsive) ─
+  // ── Window Viewport & Resize Handlers ─────────────────────────
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", function () {
+      if (isOpen && window.innerWidth <= 640) {
+        syncMobileViewport();
+      }
+    });
+    window.visualViewport.addEventListener("scroll", function () {
+      if (isOpen && window.innerWidth <= 640) {
+        syncMobileViewport();
+      }
+    });
+  }
+
   window.addEventListener("resize", function () {
     if (isOpen) {
       applyExpanded();
     }
   });
+
+  window.addEventListener("scroll", function () {
+    if (isOpen && window.innerWidth <= 640) {
+      window.scrollTo(0, 0);
+      syncMobileViewport();
+    }
+  }, { passive: true });
 
   // ── Global Controller API ──────────────────────────────────────
   window.FoxxNuts = {

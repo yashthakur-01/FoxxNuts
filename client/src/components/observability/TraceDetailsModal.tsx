@@ -137,12 +137,23 @@ export default function TraceDetailsModal({
             <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--fn-text-tertiary)] block">
               CSAT User Rating
             </span>
-            <span className="text-sm font-semibold text-[var(--fn-text)]">
-              {selectedTrace.csat_rating === 1
-                ? "👍 Helpful (Liked)"
-                : selectedTrace.csat_rating === -1
-                ? "👎 Unhelpful (Disliked)"
-                : "⚪ Unrated"}
+            <span className="text-sm font-semibold text-[var(--fn-text)] flex items-center gap-1.5">
+              {selectedTrace.csat_rating === 1 ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                  Helpful (Liked)
+                </>
+              ) : selectedTrace.csat_rating === -1 ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
+                  Unhelpful (Disliked)
+                </>
+              ) : (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-neutral-400 inline-block" />
+                  Unrated
+                </>
+              )}
             </span>
           </div>
         </div>

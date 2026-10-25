@@ -27,6 +27,7 @@ export default function DashboardChatbotHome() {
   });
   const [embedTab, setEmbedTab] = useState("html");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [mobileTab, setMobileTab] = useState<"chat" | "embed">("chat");
 
   // Initialize Session ID if needed
   useEffect(() => {
@@ -43,7 +44,7 @@ export default function DashboardChatbotHome() {
     }
   }, [activeWorkspaceId, sessionId]);
 
-  const { data: historyData } = useChatHistory(activeWorkspaceId, sessionId || null);
+  const { data: historyData, isLoading: isHistoryLoading } = useChatHistory(activeWorkspaceId, sessionId || null);
 
   // Sync loaded history from TanStack Query
   useEffect(() => {
@@ -77,6 +78,15 @@ export default function DashboardChatbotHome() {
     ]);
   };
 
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const handleStopChatting = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  };
+
   const handleSendMessage = async (query: string) => {
     if (!query || isChatting || !activeWorkspaceId) return;
 
@@ -99,6 +109,9 @@ export default function DashboardChatbotHome() {
     };
     setMessages((prev) => [...prev, botMsgPlaceholder]);
 
+    let fullResponse = "";
+    abortControllerRef.current = new AbortController();
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
 
@@ -113,6 +126,7 @@ export default function DashboardChatbotHome() {
           session_id: sessionId,
           message: query,
         }),
+        signal: abortControllerRef.current.signal,
       });
 
       if (!res.ok) {
@@ -122,7 +136,6 @@ export default function DashboardChatbotHome() {
       if (res.body) {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
-        let fullResponse = "";
 
         while (true) {
           const { done, value } = await reader.read();
@@ -139,20 +152,34 @@ export default function DashboardChatbotHome() {
       }
     } catch (err: any) {
       console.error("Chat error:", err);
-      toast.error(err.message || "Failed to send message");
+      const isAborted = err?.name === "AbortError";
+
+      if (!isAborted) {
+        toast.error(err?.message || "Failed to send message");
+      }
+
       setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === botMsgId
-            ? {
-                ...msg,
-                content:
-                  "Sorry, an error occurred while generating the response. Please ensure your documents are indexed in Knowledge Base.",
-              }
-            : msg
-        )
+        prev.map((msg) => {
+          if (msg.id !== botMsgId) return msg;
+          if (isAborted) {
+            return {
+              ...msg,
+              content: fullResponse.trim()
+                ? `${fullResponse}\n\n*[Response stopped by user]*`
+                : "*[Response stopped by user]*",
+            };
+          }
+          return {
+            ...msg,
+            content: fullResponse.trim()
+              ? `${fullResponse}\n\n*[Response interrupted]*`
+              : "Sorry, an error occurred while generating the response. Please ensure your documents are indexed in Knowledge Base.",
+          };
+        })
       );
     } finally {
       setIsChatting(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -221,10 +248,10 @@ export default function RootLayout({ children }) {
     Array.isArray(activeWorkspace?.suggested_questions) && activeWorkspace.suggested_questions.length > 0
       ? activeWorkspace.suggested_questions
       : [
-          "What topics are covered in our documents?",
-          "Can you summarize key policies?",
-          "How does the retrieval search work?",
-        ];
+        "What topics are covered in our documents?",
+        "Can you summarize key policies?",
+        "How does the retrieval search work?",
+      ];
 
   if (wsLoading) {
     return <FoxMascotLoader variant="page" message="Connecting to interactive chat assistant..." />;
@@ -236,35 +263,69 @@ export default function RootLayout({ children }) {
         title={chatbotName}
         eyebrow="Interactive Chat Playground"
         description={
-          <span>
-            Workspace: <span className="font-semibold text-[var(--fn-text)]">{activeWorkspace?.workspace_name}</span> · Model: <span className="font-mono text-[var(--fn-text)]">{activeWorkspace?.model_name || "llama-3.3-70b"}</span>
+          <span className="flex items-center gap-1.5 sm:gap-2">
+            <span className="hidden sm:inline">Workspace: <span className="font-semibold text-[var(--fn-text)]">{activeWorkspace?.workspace_name}</span> · </span>
+            <span className="hidden md:inline">Model: <span className="font-mono text-[var(--fn-text)]">{activeWorkspace?.model_name || "llama-3.3-70b"}</span></span>
+            <span className="sm:hidden text-xs text-[var(--fn-text-secondary)]">Test and interact with your AI assistant</span>
           </span>
         }
       >
         <WorkspaceDropdown />
-        <span className="px-2.5 py-1.5 rounded-lg bg-[var(--fn-elevated)] border border-[var(--fn-border)] text-[var(--fn-text-secondary)] text-xs font-mono">
+        <span className="hidden sm:inline-flex px-2.5 py-1.5 rounded-lg bg-[var(--fn-elevated)] border border-[var(--fn-border)] text-[var(--fn-text-secondary)] text-xs font-mono">
           Session: {sessionId.slice(0, 10)}
         </span>
 
         <button
           onClick={handleStartNewSession}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[var(--fn-elevated)] text-[var(--fn-text)] hover:bg-[var(--fn-surface)] border border-[var(--fn-border)] text-xs font-medium transition-all shadow-sm cursor-pointer active:scale-95"
+          className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-lg bg-[var(--fn-elevated)] text-[var(--fn-text)] hover:bg-[var(--fn-surface)] border border-[var(--fn-border)] text-xs font-medium transition-all shadow-sm cursor-pointer active:scale-95"
+          title="Reset Session"
         >
           <svg className="w-3.5 h-3.5 text-[var(--fn-text-tertiary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
           </svg>
-          Reset Session
+          <span className="hidden sm:inline">Reset Session</span>
+          <span className="sm:hidden">Reset</span>
         </button>
       </PageHeader>
 
-      {/* Main Content Area: Scrollable Chatbot + Direct In-Page Embed Script */}
-      <div className="flex-1 min-h-0 w-full overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-8">
-        <div className="max-w-5xl mx-auto space-y-8">
-          
+      {/* Mobile Mode Switcher (Playground vs Embed Code) */}
+      <div className="sm:hidden px-3 py-1.5 border-b border-[var(--fn-border)] bg-[var(--fn-surface)]/80 flex items-center gap-1.5 shrink-0">
+        <button
+          type="button"
+          onClick={() => setMobileTab("chat")}
+          className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${mobileTab === "chat"
+            ? "bg-[var(--fn-accent)] text-white shadow-xs"
+            : "bg-[var(--fn-elevated)] text-[var(--fn-text-secondary)] hover:text-[var(--fn-text)]"
+            }`}
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+          </svg>
+          Chat Playground
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab("embed")}
+          className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${mobileTab === "embed"
+            ? "bg-[var(--fn-accent)] text-white shadow-xs"
+            : "bg-[var(--fn-elevated)] text-[var(--fn-text-secondary)] hover:text-[var(--fn-text)]"
+            }`}
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
+          </svg>
+          Embed Script
+        </button>
+      </div>
+
+      {/* Main Content Area: Keypad-safe viewport container on mobile, scrollable on desktop */}
+      <div className={`flex-1 min-h-0 w-full ${mobileTab === "chat" ? "overflow-hidden sm:overflow-y-auto" : "overflow-y-auto"} px-2 sm:px-6 lg:px-8 py-2 sm:py-5 flex flex-col`}>
+        <div className={`w-full max-w-5xl mx-auto ${mobileTab === "chat" ? "flex-1 min-h-0 flex flex-col sm:block sm:space-y-8" : "space-y-6 sm:space-y-8"}`}>
+
           {/* ============================================================
               1. DIRECT INTERACTIVE CHATBOT WINDOW (INTERNAL SCROLL)
               ============================================================ */}
-          <div className="w-full h-[520px] sm:h-[620px] max-h-[calc(100vh-16rem)] min-h-[420px] flex flex-col">
+          <div className={`${mobileTab === "chat" ? "flex-1 min-h-0 h-full sm:h-[580px] lg:h-[640px] flex flex-col" : "hidden sm:flex sm:h-[580px] lg:h-[640px] flex-col"}`}>
             <ChatInterface
               config={{
                 chatbot_name: chatbotName,
@@ -276,7 +337,9 @@ export default function RootLayout({ children }) {
               }}
               messages={messages}
               isChatting={isChatting}
+              isLoading={isHistoryLoading && messages.length <= 1}
               onSendMessage={handleSendMessage}
+              onStopChatting={handleStopChatting}
               showLiveBadge={true}
               placeholder="Ask a question..."
             />
@@ -285,7 +348,7 @@ export default function RootLayout({ children }) {
           {/* ============================================================
               2. DIRECT IN-PAGE EMBED SCRIPT & CODE INTEGRATION PANEL
               ============================================================ */}
-          <div className="border border-[var(--fn-border)] rounded-2xl bg-[var(--fn-surface)] shadow-lg overflow-hidden space-y-5 sm:space-y-6 p-4 sm:p-6 lg:p-7">
+          <div className={`${mobileTab === "embed" ? "block" : "hidden sm:block"} border border-[var(--fn-border)] rounded-xl sm:rounded-2xl bg-[var(--fn-surface)] shadow-md overflow-hidden space-y-4 sm:space-y-6 p-3.5 sm:p-6 lg:p-7`}>
             <div className="border-b border-[var(--fn-border)] pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-red-500/10 text-red-500 border border-red-500/20 flex items-center justify-center font-bold text-sm">
@@ -359,7 +422,11 @@ export default function RootLayout({ children }) {
 
             {/* Callout Notice */}
             <div className="p-4 border border-[var(--fn-border)] rounded-xl bg-[var(--fn-elevated)]/50 flex items-start gap-3 text-xs text-[var(--fn-text-secondary)]">
-              <span className="text-base">💡</span>
+              <div className="w-5 h-5 rounded-md bg-[var(--fn-accent)]/10 text-[var(--fn-accent)] flex items-center justify-center shrink-0 mt-0.5">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.383a14.406 14.406 0 01-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 10-7.516 0c.85.493 1.508 1.333 1.508 2.316V18" />
+                </svg>
+              </div>
               <div className="space-y-0.5">
                 <p className="font-semibold text-[var(--fn-text)]">
                   Non-blocking, asynchronous & zero-collision loader

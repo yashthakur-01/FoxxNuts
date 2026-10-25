@@ -1,16 +1,15 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "../../../supabase/browserClient";
 import { useWorkspace } from "../../../lib/WorkspaceContext";
 import { useToast } from "../../../lib/ToastContext";
 import Input from "../../../components/ui/Input";
-import Skeleton from "../../../components/ui/Skeleton";
 import WorkspaceDropdown from "../../../components/WorkspaceDropdown";
 import { SettingInfoButton } from "../../../components/ui/SettingInfoModal";
-import MarkdownRenderer from "../../../components/ui/MarkdownRenderer";
 import PageHeader from "../../../components/layout/PageHeader";
 import FoxMascotLoader from "../../../components/ui/FoxMascotLoader";
+import ChatInterface, { ChatMessage } from "../../../components/ChatInterface";
 
 const COLOR_PRESETS = [
   { name: "Crimson Red", value: "#E50914" },
@@ -21,13 +20,6 @@ const COLOR_PRESETS = [
   { name: "Midnight Black", value: "#1E293B" },
 ];
 
-interface PreviewMessage {
-  id: string;
-  role: "user" | "bot";
-  text: string;
-  timestamp: string;
-}
-
 export default function ChatbotStylingConfigPage() {
   const supabase = createClient();
   const { activeWorkspaceId, activeWorkspace, refreshWorkspaces, loading: wsLoading } = useWorkspace();
@@ -35,6 +27,7 @@ export default function ChatbotStylingConfigPage() {
 
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [mobileTab, setMobileTab] = useState<"settings" | "preview">("settings");
 
   // Form State
   const [workspaceName, setWorkspaceName] = useState("");
@@ -46,37 +39,8 @@ export default function ChatbotStylingConfigPage() {
   const [chatbotTheme, setChatbotTheme] = useState<"dark" | "light">("dark");
 
   // Live Chatbot Preview State
-  const [previewMessages, setPreviewMessages] = useState<PreviewMessage[]>([]);
-  const [previewInput, setPreviewInput] = useState("");
+  const [previewMessages, setPreviewMessages] = useState<ChatMessage[]>([]);
   const [isPreviewChatting, setIsPreviewChatting] = useState(false);
-  const [isInputFocused, setIsInputFocused] = useState(false);
-  const previewEndRef = useRef<HTMLDivElement>(null);
-  const previewInputRef = useRef<HTMLTextAreaElement>(null);
-
-  const MAX_PREVIEW_HEIGHT = 130; // ~5-6 lines
-
-  useEffect(() => {
-    if (!previewInputRef.current) return;
-    const el = previewInputRef.current;
-    if (!previewInput) {
-      el.style.height = "44px";
-      el.style.overflowY = "hidden";
-      return;
-    }
-    el.style.height = "auto";
-    const scrollHeight = el.scrollHeight;
-    if (scrollHeight > MAX_PREVIEW_HEIGHT) {
-      el.style.height = `${MAX_PREVIEW_HEIGHT}px`;
-      el.style.overflowY = "auto";
-    } else {
-      el.style.height = `${Math.max(44, scrollHeight)}px`;
-      el.style.overflowY = "hidden";
-    }
-  }, [previewInput]);
-
-  const handlePreviewInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setPreviewInput(e.target.value);
-  };
 
   // Populate from activeWorkspace
   useEffect(() => {
@@ -92,14 +56,20 @@ export default function ChatbotStylingConfigPage() {
       setPreviewMessages([
         {
           id: "preview-welcome",
-          role: "bot",
-          text: activeWorkspace.welcome_message || "Hello! How can I help you today?",
+          role: "ai",
+          content:
+            activeWorkspace.welcome_message ||
+            "👋 Hi there! I'm the FoxxNuts Assistant. Ask me anything about our LangGraph architecture, dashboard features, or how to embed a chatbot on your site!",
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         },
       ]);
       setHasChanges(false);
     }
   }, [activeWorkspace]);
+
+  const markDirty = () => {
+    if (!hasChanges) setHasChanges(true);
+  };
 
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -144,29 +114,18 @@ export default function ChatbotStylingConfigPage() {
     }
   };
 
-  const markDirty = () => {
-    if (!hasChanges) setHasChanges(true);
-  };
-
   // Preview interactive message handler
-  const handlePreviewSend = async (customText?: string) => {
-    const text = customText || previewInput.trim();
-    if (!text || isPreviewChatting) return;
+  const handlePreviewSend = async (text: string) => {
+    if (!text?.trim() || isPreviewChatting) return;
 
-    const userMsg: PreviewMessage = {
+    const userMsg: ChatMessage = {
       id: Date.now().toString(),
-      role: "user",
-      text,
+      role: "human",
+      content: text,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
 
-    if (!customText) {
-      setPreviewInput("");
-      if (previewInputRef.current) {
-        previewInputRef.current.style.height = "44px";
-        previewInputRef.current.style.overflowY = "hidden";
-      }
-    }
+    setPreviewMessages((prev) => [...prev, userMsg]);
     setIsPreviewChatting(true);
 
     try {
@@ -186,10 +145,10 @@ export default function ChatbotStylingConfigPage() {
       });
 
       const botMsgId = (Date.now() + 1).toString();
-      const botMsg: PreviewMessage = {
+      const botMsg: ChatMessage = {
         id: botMsgId,
-        role: "bot",
-        text: "",
+        role: "ai",
+        content: "",
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       };
 
@@ -204,7 +163,7 @@ export default function ChatbotStylingConfigPage() {
           if (done) break;
           full += decoder.decode(value, { stream: true });
           setPreviewMessages((prev) =>
-            prev.map((m) => (m.id === botMsgId ? { ...m, text: full } : m))
+            prev.map((m) => (m.id === botMsgId ? { ...m, content: full } : m))
           );
         }
       }
@@ -213,8 +172,8 @@ export default function ChatbotStylingConfigPage() {
         ...prev,
         {
           id: Date.now().toString(),
-          role: "bot",
-          text: "I am ready to assist based on your current knowledge documents and system prompts.",
+          role: "ai",
+          content: "I am ready to assist based on your current knowledge documents and system prompts.",
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         },
       ]);
@@ -223,11 +182,22 @@ export default function ChatbotStylingConfigPage() {
     }
   };
 
+  const handleResetSession = () => {
+    setPreviewMessages([
+      {
+        id: "preview-welcome-reset",
+        role: "ai",
+        content:
+          activeWorkspace?.welcome_message ||
+          "👋 Hi there! I'm the FoxxNuts Assistant. Ask me anything about our LangGraph architecture, dashboard features, or how to embed a chatbot on your site!",
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      },
+    ]);
+  };
+
   if (wsLoading) {
     return <FoxMascotLoader variant="page" message="Loading chatbot styling preferences..." />;
   }
-
-  const isDarkPreview = chatbotTheme === "dark";
 
   return (
     <div className="w-full h-full flex flex-col overflow-hidden animate-fn-fade-in font-sans">
@@ -256,13 +226,49 @@ export default function ChatbotStylingConfigPage() {
         </button>
       </PageHeader>
 
+      {/* Mobile Tab Switcher (Only visible on < lg screens) */}
+      <div className="lg:hidden px-4 pt-2.5 pb-1 shrink-0">
+        <div className="flex items-center p-1 bg-[var(--fn-surface)] border border-[var(--fn-border)] rounded-xl shadow-xs">
+          <button
+            type="button"
+            onClick={() => setMobileTab("settings")}
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+              mobileTab === "settings"
+                ? "bg-[var(--fn-accent)] text-white shadow-xs"
+                : "text-[var(--fn-text-secondary)] hover:text-[var(--fn-text)]"
+            }`}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+            </svg>
+            Theme Settings
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab("preview")}
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+              mobileTab === "preview"
+                ? "bg-[var(--fn-accent)] text-white shadow-xs"
+                : "text-[var(--fn-text-secondary)] hover:text-[var(--fn-text)]"
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            Live Preview
+          </button>
+        </div>
+      </div>
+
       {/* 50/50 Split Screen: Left Scrollable Settings | Right Fixed Live Chatbot */}
-      <div className="w-full flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch p-4 sm:p-6 lg:p-7 overflow-y-auto lg:overflow-hidden">
+      <div className="w-full flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start lg:items-stretch p-4 sm:p-6 lg:p-7 overflow-y-auto lg:overflow-hidden">
         {/* ============================================================
             LEFT HALF: INDEPENDENTLY SCROLLABLE FORM
             ============================================================ */}
-        <div className="lg:col-span-7 h-auto lg:h-full flex flex-col overflow-visible lg:overflow-hidden min-h-0 bg-[var(--fn-surface)] border border-[var(--fn-border)] rounded-2xl p-4 sm:p-6 shadow-sm">
-          <div className="flex-1 min-h-0 overflow-y-visible lg:overflow-y-auto pr-0 lg:pr-3 space-y-6 no-scrollbar">
+        <div
+          className={`lg:col-span-7 w-full h-auto lg:h-full flex flex-col bg-[var(--fn-surface)] border border-[var(--fn-border)] rounded-2xl p-4 sm:p-6 shadow-sm ${
+            mobileTab === "preview" ? "hidden lg:flex" : "flex"
+          }`}
+        >
+          <div className="w-full space-y-6 lg:flex-1 lg:min-h-0 lg:overflow-y-auto pr-0 lg:pr-3 no-scrollbar">
             {/* Identity Group */}
             <div className="space-y-4">
               <div className="border-b border-[var(--fn-border)] pb-2.5">
@@ -386,7 +392,10 @@ export default function ChatbotStylingConfigPage() {
                           : "text-[var(--fn-text-secondary)] hover:text-[var(--fn-text)]"
                       }`}
                     >
-                      🌙 Dark Mode
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+                      </svg>
+                      Dark Mode
                     </button>
                     <button
                       type="button"
@@ -400,7 +409,10 @@ export default function ChatbotStylingConfigPage() {
                           : "text-[var(--fn-text-secondary)] hover:text-[var(--fn-text)]"
                       }`}
                     >
-                      ☀️ Light Mode
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+                      </svg>
+                      Light Mode
                     </button>
                   </div>
                 </div>
@@ -458,222 +470,74 @@ export default function ChatbotStylingConfigPage() {
                 />
               </div>
             </div>
+
+            {/* Mobile Switch to Live Preview CTA */}
+            <div className="lg:hidden pt-2 pb-1">
+              <button
+                type="button"
+                onClick={() => setMobileTab("preview")}
+                className="w-full py-3 px-4 rounded-xl bg-[var(--fn-elevated)] hover:bg-[var(--fn-surface)] border border-[var(--fn-border)] text-[var(--fn-text)] text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.98]"
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                Preview Live Chatbot Styling →
+              </button>
+            </div>
           </div>
         </div>
 
         {/* ============================================================
             RIGHT HALF: FIXED LIVE CHATBOT SANDBOX
             ============================================================ */}
-        <div className="lg:col-span-5 h-[540px] sm:h-[600px] lg:h-full flex flex-col space-y-2 overflow-hidden min-h-0 shrink-0">
+        <div
+          className={`lg:col-span-5 w-full h-[540px] sm:h-[600px] lg:h-full flex flex-col space-y-2 min-h-0 shrink-0 ${
+            mobileTab === "settings" ? "hidden lg:flex" : "flex"
+          }`}
+        >
           <div className="flex items-center justify-between px-1 shrink-0">
             <span className="text-xs font-bold text-[var(--fn-text)] flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               Live Interactive Sandbox
             </span>
-            <span className="text-[11px] text-[var(--fn-text-tertiary)] font-mono">
-              Theme: {chatbotTheme}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-[var(--fn-text-tertiary)] font-mono">
+                Theme: {chatbotTheme}
+              </span>
+              <button
+                type="button"
+                onClick={() => setMobileTab("settings")}
+                className="lg:hidden text-xs text-[var(--fn-accent)] hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+              >
+                ← Edit Styling
+              </button>
+            </div>
           </div>
 
-          {/* Fixed Live Chatbot Sandbox (Dynamically adapts to selected Dark/Light Widget Theme) */}
-          <div
-            className={`w-full flex-1 border rounded-2xl shadow-2xl overflow-hidden flex flex-col min-h-0 transition-colors duration-200 ${
-              isDarkPreview
-                ? "bg-[#0E0E0E] text-white border-[#222222]"
-                : "bg-[#FFFFFF] text-gray-900 border-gray-200"
-            }`}
-          >
-            {/* Header */}
-            <div
-              style={{ backgroundColor: primaryColor }}
-              className="px-5 py-4 text-white flex items-center justify-between shrink-0 shadow-xs select-none"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-xs flex items-center justify-center font-extrabold text-sm shrink-0 border border-white/25">
-                  {(chatbotName || "A")[0]}
-                </div>
-                <div className="min-w-0">
-                  <h3 className="font-bold text-sm sm:text-base leading-tight truncate">{chatbotName}</h3>
-                  <p className="text-[11px] sm:text-xs text-white/80 leading-tight truncate">{chatbotDesc || "Powered by FoxxNuts"}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 text-xs bg-black/25 text-white px-3 py-1 rounded-full backdrop-blur-xs font-medium">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  Live Assistant
-                </span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPreviewMessages([
-                      {
-                        id: "welcome-reset",
-                        role: "bot",
-                        text: activeWorkspace?.welcome_message || "Hello! How can I help you today?",
-                        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-                      },
-                    ])
-                  }
-                  className="p-1.5 rounded-lg text-white/80 hover:bg-black/20 hover:text-white transition-colors cursor-pointer"
-                  title="Reset conversation"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            {/* Messages Scroll Area */}
-            <div
-              className={`flex-1 min-h-0 overflow-y-auto chat-scrollbar p-5 space-y-4 transition-colors duration-200 ${
-                isDarkPreview ? "bg-[#080808]" : "bg-gray-50"
-              }`}
-            >
-              {previewMessages.map((msg) => {
-                if (msg.role === "bot" && !msg.text?.trim()) {
-                  return null;
-                }
-                return (
-                  <div
-                    key={msg.id}
-                    className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
-                  >
-                    <div
-                      style={msg.role === "user" ? { backgroundColor: primaryColor } : {}}
-                      className={`max-w-[85%] sm:max-w-[78%] rounded-[var(--fn-radius-lg)] px-4 py-3 text-sm leading-relaxed shadow-xs ${
-                        msg.role === "user"
-                          ? "text-white rounded-br-xs font-medium"
-                          : isDarkPreview
-                          ? "bg-[#141414] text-gray-100 border border-[#2A2A2A] rounded-bl-xs"
-                          : "bg-white text-gray-900 border border-gray-200 rounded-bl-xs shadow-xs"
-                      }`}
-                    >
-                      {msg.role === "user" ? (
-                        <p className="whitespace-pre-wrap">{msg.text}</p>
-                      ) : (
-                        <MarkdownRenderer content={msg.text} isDark={isDarkPreview} />
-                      )}
-                    </div>
-                    <span
-                      className={`text-[10px] mt-1 px-1 ${
-                        isDarkPreview ? "text-neutral-500" : "text-gray-400"
-                      }`}
-                    >
-                      {msg.timestamp}
-                    </span>
-                  </div>
-                );
-              })}
-
-              {/* Typing Indicator */}
-              {isPreviewChatting && (
-                <div className="flex flex-col items-start">
-                  <div
-                    className={`rounded-[var(--fn-radius-lg)] rounded-bl-xs px-4 py-3 flex items-center gap-1.5 shadow-xs border ${
-                      isDarkPreview
-                        ? "bg-[#141414] border-[#2A2A2A]"
-                        : "bg-white border-gray-200"
-                    }`}
-                  >
-                    <div className="w-2 h-2 bg-neutral-400 rounded-full animate-bounce" />
-                    <div className="w-2 h-2 bg-neutral-400 rounded-full animate-bounce [animation-delay:150ms]" />
-                    <div className="w-2 h-2 bg-neutral-400 rounded-full animate-bounce [animation-delay:300ms]" />
-                  </div>
-                </div>
-              )}
-
-              <div ref={previewEndRef} />
-            </div>
-
-            {/* Suggested Question Pills */}
-            {(activeWorkspace?.suggested_questions || [
-              "What topics are covered in our documents?",
-              "Can you summarize key policies?",
-            ]).length > 0 &&
-              previewMessages.length <= 1 && (
-                <div
-                  className={`px-5 py-3 border-t flex flex-wrap gap-2 shrink-0 transition-colors duration-200 ${
-                    isDarkPreview
-                      ? "bg-[#0E0E0E] border-[#222222]"
-                      : "bg-white border-gray-200"
-                  }`}
-                >
-                  {(
-                    activeWorkspace?.suggested_questions || [
-                      "What topics are covered in our documents?",
-                      "Can you summarize key policies?",
-                    ]
-                  ).map((q, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => handlePreviewSend(q)}
-                      className={`text-xs px-3 py-1.5 rounded-full transition-all duration-150 cursor-pointer truncate max-w-full font-medium border ${
-                        isDarkPreview
-                          ? "bg-[#1A1A1A] hover:bg-[#252525] border-[#2A2A2A] text-gray-300 hover:text-white"
-                          : "bg-gray-100 hover:bg-gray-200 border-gray-200 text-gray-800 hover:text-gray-900"
-                      }`}
-                    >
-                      {q}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-            {/* Input Bar */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handlePreviewSend();
+          {/* Fixed Live Chatbot Sandbox with ChatInterface */}
+          <div className="w-full flex-1 min-h-0 flex flex-col overflow-hidden">
+            <ChatInterface
+              config={{
+                chatbot_name: chatbotName || "FoxxNuts Assistant",
+                chatbot_description: chatbotDesc || "Powered by FoxxNuts",
+                primary_color: primaryColor,
+                chatbot_theme: chatbotTheme,
+                welcome_message:
+                  activeWorkspace?.welcome_message ||
+                  "👋 Hi there! I'm the FoxxNuts Assistant. Ask me anything about our LangGraph architecture, dashboard features, or how to embed a chatbot on your site!",
+                suggested_questions:
+                  activeWorkspace?.suggested_questions && activeWorkspace.suggested_questions.length > 0
+                    ? activeWorkspace.suggested_questions
+                    : [
+                        "What topics are covered in our documents?",
+                        "Can you summarize key policies?",
+                      ],
               }}
-              className={`p-4 border-t flex items-end gap-3 shrink-0 transition-colors duration-200 ${
-                isDarkPreview
-                  ? "bg-[#0E0E0E] border-[#222222]"
-                  : "bg-white border-gray-200"
-              }`}
-            >
-              <textarea
-                ref={previewInputRef}
-                value={previewInput}
-                onChange={handlePreviewInputChange}
-                onFocus={() => setIsInputFocused(true)}
-                onBlur={() => setIsInputFocused(false)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handlePreviewSend();
-                  }
-                }}
-                rows={1}
-                placeholder="Ask a question..."
-                disabled={isPreviewChatting}
-                style={{
-                  height: "44px",
-                  overflowY: "hidden",
-                  borderColor: isInputFocused ? primaryColor : (isDarkPreview ? "#2A2A2A" : "#E5E7EB"),
-                  boxShadow: isInputFocused ? `0 0 0 1px ${primaryColor}40` : "none",
-                  outline: "none",
-                }}
-                className={`flex-1 border text-sm rounded-[var(--fn-radius)] px-4 py-2.5 transition-all font-medium resize-none min-h-[44px] max-h-[130px] chat-input-scrollbar leading-relaxed ${
-                  isDarkPreview
-                    ? "bg-[#141414] text-white placeholder:text-neutral-500"
-                    : "bg-gray-50 text-gray-900 placeholder:text-gray-400"
-                }`}
-              />
-              <button
-                type="submit"
-                disabled={!previewInput.trim() || isPreviewChatting}
-                style={{ backgroundColor: primaryColor }}
-                className="h-[42px] px-4 text-white rounded-[var(--fn-radius)] disabled:opacity-40 transition-transform active:scale-95 cursor-pointer shadow-md flex items-center justify-center shrink-0"
-                title="Send Message (Enter)"
-              >
-                <svg className="w-4 h-4 transform rotate-90" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
-                </svg>
-              </button>
-            </form>
+              messages={previewMessages}
+              isChatting={isPreviewChatting}
+              onSendMessage={handlePreviewSend}
+              onResetSession={handleResetSession}
+              showLiveBadge={true}
+              className="w-full h-full flex-1 min-h-0"
+            />
           </div>
         </div>
       </div>

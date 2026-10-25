@@ -502,7 +502,10 @@ export function SettingInfoButton({
             {/* 1. What is the use of this setting */}
             <div className="space-y-1.5 bg-[var(--fn-surface)] p-4 rounded-xl border border-[var(--fn-border)] shadow-xs">
               <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--fn-accent)] flex items-center gap-1.5">
-                <span>📌</span> What is this setting used for?
+                <svg className="w-3.5 h-3.5 text-[var(--fn-accent)] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                </svg>
+                What is this setting used for?
               </h4>
               <p className="text-sm text-[var(--fn-text)] leading-relaxed">{detail.use}</p>
             </div>
@@ -511,7 +514,10 @@ export function SettingInfoButton({
             {detail.differences && detail.differences.length > 0 && (
               <div className="space-y-2.5">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--fn-text)] flex items-center gap-1.5">
-                  <span>📊</span> How Different Options/Values Behave
+                  <svg className="w-3.5 h-3.5 text-[var(--fn-text-secondary)] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+                  </svg>
+                  How Different Options/Values Behave
                 </h4>
                 <div className="grid gap-2.5">
                   {detail.differences.map((diff, idx) => (
@@ -536,7 +542,10 @@ export function SettingInfoButton({
             {detail.recommendations && detail.recommendations.length > 0 && (
               <div className="space-y-2.5">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--fn-text)] flex items-center gap-1.5">
-                  <span>💡</span> Recommended Values by Use Case
+                  <svg className="w-3.5 h-3.5 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Recommended Values by Use Case
                 </h4>
                 <div className="grid gap-3">
                   {detail.recommendations.map((rec, idx) => (
@@ -566,7 +575,10 @@ export function SettingInfoButton({
             {detail.notes && (
               <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/25 space-y-1.5 shadow-xs">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-amber-500 flex items-center gap-1.5">
-                  <span>💡</span> Troubleshooting Tip
+                  <svg className="w-3.5 h-3.5 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                  </svg>
+                  Troubleshooting Tip
                 </h4>
                 <p className="text-xs text-[var(--fn-text)] leading-relaxed">
                   {detail.notes}

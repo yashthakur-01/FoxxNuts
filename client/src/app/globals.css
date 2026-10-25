@@ -240,3 +240,19 @@ textarea::-webkit-scrollbar-thumb:hover {
 .animate-fn-slide-up {
   animation: fn-slide-up 0.2s ease-out;
 }
+
+/* ============================================================
+   Mobile Optimizations: Smooth hardware layers
+   ============================================================ */
+@media (max-width: 767px) {
+  /* Hardware acceleration for buttery smooth 60fps mobile scrolling */
+  .scroll-reveal-header,
+  .scroll-reveal-cards,
+  .embed-code-card,
+  .comparison-table-wrapper,
+  .cta-banner-card {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
+}
+

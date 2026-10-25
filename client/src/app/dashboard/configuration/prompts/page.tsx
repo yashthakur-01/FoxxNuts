@@ -1,23 +1,15 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "../../../../supabase/browserClient";
 import { useWorkspace } from "../../../../lib/WorkspaceContext";
 import { useToast } from "../../../../lib/ToastContext";
 import Input, { Textarea } from "../../../../components/ui/Input";
-import Skeleton from "../../../../components/ui/Skeleton";
 import WorkspaceDropdown from "../../../../components/WorkspaceDropdown";
 import { SettingInfoButton } from "../../../../components/ui/SettingInfoModal";
-import MarkdownRenderer from "../../../../components/ui/MarkdownRenderer";
 import PageHeader from "../../../../components/layout/PageHeader";
 import FoxMascotLoader from "../../../../components/ui/FoxMascotLoader";
-
-interface PreviewMessage {
-  id: string;
-  role: "user" | "bot";
-  text: string;
-  timestamp: string;
-}
+import ChatInterface, { ChatMessage } from "../../../../components/ChatInterface";
 
 export default function PromptsConfigPage() {
   const supabase = createClient();
@@ -26,6 +18,7 @@ export default function PromptsConfigPage() {
 
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [mobileTab, setMobileTab] = useState<"settings" | "preview">("settings");
 
   // Form State
   const [welcomeMessage, setWelcomeMessage] = useState("Hello! How can I help you today?");
@@ -34,37 +27,8 @@ export default function PromptsConfigPage() {
   const [searchEnabled, setSearchEnabled] = useState(false);
 
   // Live Chatbot Preview State
-  const [previewMessages, setPreviewMessages] = useState<PreviewMessage[]>([]);
-  const [previewInput, setPreviewInput] = useState("");
+  const [previewMessages, setPreviewMessages] = useState<ChatMessage[]>([]);
   const [isPreviewChatting, setIsPreviewChatting] = useState(false);
-  const [isInputFocused, setIsInputFocused] = useState(false);
-  const previewEndRef = useRef<HTMLDivElement>(null);
-  const previewInputRef = useRef<HTMLTextAreaElement>(null);
-
-  const MAX_PREVIEW_HEIGHT = 120; // ~5-6 lines
-
-  useEffect(() => {
-    if (!previewInputRef.current) return;
-    const el = previewInputRef.current;
-    if (!previewInput) {
-      el.style.height = "40px";
-      el.style.overflowY = "hidden";
-      return;
-    }
-    el.style.height = "auto";
-    const scrollHeight = el.scrollHeight;
-    if (scrollHeight > MAX_PREVIEW_HEIGHT) {
-      el.style.height = `${MAX_PREVIEW_HEIGHT}px`;
-      el.style.overflowY = "auto";
-    } else {
-      el.style.height = `${Math.max(40, scrollHeight)}px`;
-      el.style.overflowY = "hidden";
-    }
-  }, [previewInput]);
-
-  const handlePreviewInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setPreviewInput(e.target.value);
-  };
 
   // Populate from activeWorkspace
   useEffect(() => {
@@ -81,8 +45,8 @@ export default function PromptsConfigPage() {
       setPreviewMessages([
         {
           id: "preview-welcome",
-          role: "bot",
-          text: activeWorkspace.welcome_message || "Hello! How can I help you today?",
+          role: "ai",
+          content: activeWorkspace.welcome_message || "Hello! How can I help you today?",
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         },
       ]);
@@ -97,8 +61,8 @@ export default function PromptsConfigPage() {
         return [
           {
             id: "preview-welcome",
-            role: "bot",
-            text: welcomeMessage || "Hello! How can I help you today?",
+            role: "ai",
+            content: welcomeMessage || "Hello! How can I help you today?",
             timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           },
         ];
@@ -157,25 +121,17 @@ export default function PromptsConfigPage() {
   };
 
   // Preview interactive message handler
-  const handlePreviewSend = async (customText?: string) => {
-    const text = customText || previewInput.trim();
-    if (!text || isPreviewChatting) return;
+  const handlePreviewSend = async (text: string) => {
+    if (!text?.trim() || isPreviewChatting) return;
 
-    const userMsg: PreviewMessage = {
+    const userMsg: ChatMessage = {
       id: Date.now().toString(),
-      role: "user",
-      text,
+      role: "human",
+      content: text,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
 
     setPreviewMessages((prev) => [...prev, userMsg]);
-    if (!customText) {
-      setPreviewInput("");
-      if (previewInputRef.current) {
-        previewInputRef.current.style.height = "40px";
-        previewInputRef.current.style.overflowY = "hidden";
-      }
-    }
     setIsPreviewChatting(true);
 
     try {
@@ -195,10 +151,10 @@ export default function PromptsConfigPage() {
       });
 
       const botMsgId = (Date.now() + 1).toString();
-      const botMsg: PreviewMessage = {
+      const botMsg: ChatMessage = {
         id: botMsgId,
-        role: "bot",
-        text: "",
+        role: "ai",
+        content: "",
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       };
 
@@ -213,7 +169,7 @@ export default function PromptsConfigPage() {
           if (done) break;
           full += decoder.decode(value, { stream: true });
           setPreviewMessages((prev) =>
-            prev.map((m) => (m.id === botMsgId ? { ...m, text: full } : m))
+            prev.map((m) => (m.id === botMsgId ? { ...m, content: full } : m))
           );
         }
       }
@@ -222,8 +178,8 @@ export default function PromptsConfigPage() {
         ...prev,
         {
           id: Date.now().toString(),
-          role: "bot",
-          text: "I am ready to assist based on your knowledge documents and system prompts.",
+          role: "ai",
+          content: "I am ready to assist based on your knowledge documents and system prompts.",
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         },
       ]);
@@ -232,13 +188,23 @@ export default function PromptsConfigPage() {
     }
   };
 
+  const handleResetSession = () => {
+    setPreviewMessages([
+      {
+        id: "welcome-reset",
+        role: "ai",
+        content: welcomeMessage || "Hello! How can I help you today?",
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      },
+    ]);
+  };
+
   if (wsLoading) {
     return <FoxMascotLoader variant="page" message="Loading prompt templates & agent behavior..." />;
   }
 
   const primaryColor = activeWorkspace?.primary_color || "#E50914";
   const chatbotName = activeWorkspace?.chatbot_name || "AI Assistant";
-  const isDarkPreview = activeWorkspace?.chatbot_theme !== "light";
 
   return (
     <div className="w-full h-full flex flex-col overflow-hidden animate-fn-fade-in font-sans">
@@ -267,11 +233,49 @@ export default function PromptsConfigPage() {
         </button>
       </PageHeader>
 
-      {/* 50/50 Split Screen */}
-      <div className="w-full flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch p-4 sm:p-6 lg:p-7 overflow-y-auto lg:overflow-hidden">
-        {/* Left Form */}
-        <div className="lg:col-span-7 h-auto lg:h-full flex flex-col overflow-visible lg:overflow-hidden min-h-0 bg-[var(--fn-surface)] border border-[var(--fn-border)] rounded-2xl p-4 sm:p-6 shadow-sm">
-          <div className="flex-1 min-h-0 overflow-y-visible lg:overflow-y-auto pr-0 lg:pr-3 space-y-6 no-scrollbar">
+      {/* Mobile Tab Switcher (Only visible on < lg screens) */}
+      <div className="lg:hidden px-4 pt-2.5 pb-1 shrink-0">
+        <div className="flex items-center p-1 bg-[var(--fn-surface)] border border-[var(--fn-border)] rounded-xl shadow-xs">
+          <button
+            type="button"
+            onClick={() => setMobileTab("settings")}
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+              mobileTab === "settings"
+                ? "bg-[var(--fn-accent)] text-white shadow-xs"
+                : "text-[var(--fn-text-secondary)] hover:text-[var(--fn-text)]"
+            }`}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+            </svg>
+            Prompts Settings
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab("preview")}
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+              mobileTab === "preview"
+                ? "bg-[var(--fn-accent)] text-white shadow-xs"
+                : "text-[var(--fn-text-secondary)] hover:text-[var(--fn-text)]"
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            Live Preview
+          </button>
+        </div>
+      </div>
+
+      {/* 50/50 Split Screen: Left Scrollable Settings | Right Fixed Live Chatbot */}
+      <div className="w-full flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start lg:items-stretch p-4 sm:p-6 lg:p-7 overflow-y-auto lg:overflow-hidden">
+        {/* ============================================================
+            LEFT HALF: INDEPENDENTLY SCROLLABLE FORM
+            ============================================================ */}
+        <div
+          className={`lg:col-span-7 w-full h-auto lg:h-full flex flex-col bg-[var(--fn-surface)] border border-[var(--fn-border)] rounded-2xl p-4 sm:p-6 shadow-sm ${
+            mobileTab === "preview" ? "hidden lg:flex" : "flex"
+          }`}
+        >
+          <div className="w-full space-y-6 lg:flex-1 lg:min-h-0 lg:overflow-y-auto pr-0 lg:pr-3 no-scrollbar">
             {/* Welcome Greeting */}
             <div className="space-y-4">
               <div className="border-b border-[var(--fn-border)] pb-2.5 flex items-center justify-between">
@@ -383,188 +387,66 @@ export default function PromptsConfigPage() {
                 </label>
               </div>
             </div>
+
+            {/* Mobile Switch to Live Preview CTA */}
+            <div className="lg:hidden pt-2 pb-1">
+              <button
+                type="button"
+                onClick={() => setMobileTab("preview")}
+                className="w-full py-3 px-4 rounded-xl bg-[var(--fn-elevated)] hover:bg-[var(--fn-surface)] border border-[var(--fn-border)] text-[var(--fn-text)] text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.98]"
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                Preview Live Prompts & Behavior →
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Right Sandbox */}
-        <div className="lg:col-span-5 h-[540px] sm:h-[600px] lg:h-full flex flex-col space-y-2 overflow-hidden min-h-0 shrink-0">
+        {/* ============================================================
+            RIGHT HALF: FIXED LIVE CHATBOT SANDBOX
+            ============================================================ */}
+        <div
+          className={`lg:col-span-5 w-full h-[540px] sm:h-[600px] lg:h-full flex flex-col space-y-2 min-h-0 shrink-0 ${
+            mobileTab === "settings" ? "hidden lg:flex" : "flex"
+          }`}
+        >
           <div className="flex items-center justify-between px-1 shrink-0">
             <span className="text-xs font-bold text-[var(--fn-text)] flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               Live Interactive Sandbox
             </span>
-            <span className="text-[11px] text-[var(--fn-text-tertiary)] font-mono">
-              Live Preview
-            </span>
-          </div>
-
-          <div
-            className={`w-full flex-1 border rounded-2xl shadow-xl overflow-hidden flex flex-col min-h-0 transition-all duration-200 ${
-              isDarkPreview
-                ? "bg-[#0D0D0D] text-white border-[#222222]"
-                : "bg-[#FFFFFF] text-gray-900 border-gray-200"
-            }`}
-          >
-            {/* Header */}
-            <div
-              style={{ backgroundColor: primaryColor }}
-              className="px-4 py-3.5 text-white flex items-center justify-between shrink-0 shadow-xs select-none"
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-xs flex items-center justify-center font-extrabold text-xs shrink-0 border border-white/25">
-                  {(chatbotName || "A")[0]}
-                </div>
-                <div className="min-w-0">
-                  <h3 className="font-bold text-sm leading-tight truncate">{chatbotName}</h3>
-                </div>
-              </div>
-
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-[var(--fn-text-tertiary)] font-mono">
+                Theme: {activeWorkspace?.chatbot_theme || "dark"}
+              </span>
               <button
                 type="button"
-                onClick={() =>
-                  setPreviewMessages([
-                    {
-                      id: "welcome-reset",
-                      role: "bot",
-                      text: welcomeMessage || "Hello! How can I help you today?",
-                      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-                    },
-                  ])
-                }
-                className="p-1.5 rounded-lg text-white/80 hover:bg-black/20 hover:text-white transition-colors cursor-pointer"
-                title="Reset conversation"
+                onClick={() => setMobileTab("settings")}
+                className="lg:hidden text-xs text-[var(--fn-accent)] hover:underline font-semibold flex items-center gap-1 cursor-pointer"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-                </svg>
+                ← Edit Prompts
               </button>
             </div>
+          </div>
 
-            {/* Messages Scroll Area */}
-            <div
-              className={`flex-1 min-h-0 overflow-y-auto chat-scrollbar p-4 space-y-4 ${
-                isDarkPreview ? "bg-[#080808]" : "bg-gray-50"
-              }`}
-            >
-              {previewMessages.map((msg) => {
-                if (msg.role === "bot" && !msg.text?.trim()) {
-                  return null;
-                }
-                return (
-                  <div
-                    key={msg.id}
-                    className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
-                  >
-                    <div
-                      style={msg.role === "user" ? { backgroundColor: primaryColor } : {}}
-                      className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-xs sm:text-sm leading-relaxed shadow-xs ${
-                        msg.role === "user"
-                          ? "text-white rounded-br-xs font-medium"
-                          : isDarkPreview
-                          ? "bg-[#151515] text-[#EDEDED] border border-[#222222] rounded-bl-xs"
-                          : "bg-white text-gray-800 border border-gray-200/80 rounded-bl-xs"
-                      }`}
-                    >
-                      {msg.role === "user" ? (
-                        <p className="whitespace-pre-wrap">{msg.text}</p>
-                      ) : (
-                        <MarkdownRenderer content={msg.text} isDark={isDarkPreview} />
-                      )}
-                    </div>
-                    <span className="text-[10px] text-gray-500 mt-1 px-1">{msg.timestamp}</span>
-                  </div>
-                );
-              })}
-
-              {isPreviewChatting && (
-                <div
-                  className={`flex items-center space-x-1.5 p-3 rounded-2xl rounded-bl-xs max-w-[80px] ${
-                    isDarkPreview ? "bg-[#151515] border border-[#222222]" : "bg-white border border-gray-200"
-                  }`}
-                >
-                  <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" />
-                  <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                  <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                </div>
-              )}
-
-              <div ref={previewEndRef} />
-            </div>
-
-            {/* Suggested Questions Pills */}
-            {parsedQuestions.length > 0 && previewMessages.length <= 1 && (
-              <div
-                className={`px-3.5 py-2.5 border-t flex flex-wrap gap-2 shrink-0 ${
-                  isDarkPreview ? "bg-[#0D0D0D] border-[#222222]" : "bg-white border-gray-100"
-                }`}
-              >
-                {parsedQuestions.map((q, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => handlePreviewSend(q)}
-                    className={`text-[11px] px-3 py-1 rounded-full border transition-colors cursor-pointer truncate max-w-full font-medium ${
-                      isDarkPreview
-                        ? "bg-[#181818] border-[#2E2E2E] text-gray-300 hover:text-white hover:border-gray-500"
-                        : "bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200"
-                    }`}
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Input Bar */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handlePreviewSend();
+          {/* Canonical ChatInterface Component with live prompts preview */}
+          <div className="w-full flex-1 min-h-0 flex flex-col overflow-hidden">
+            <ChatInterface
+              config={{
+                chatbot_name: chatbotName || "FoxxNuts Assistant",
+                chatbot_description: activeWorkspace?.chatbot_description || "Powered by FoxxNuts",
+                primary_color: primaryColor,
+                chatbot_theme: activeWorkspace?.chatbot_theme === "light" ? "light" : "dark",
+                welcome_message: welcomeMessage || "Hello! How can I help you today?",
+                suggested_questions: parsedQuestions,
               }}
-              className={`p-3.5 border-t flex items-end gap-2.5 shrink-0 ${
-                isDarkPreview ? "bg-[#0D0D0D] border-[#222222]" : "bg-white border-gray-200"
-              }`}
-            >
-              <textarea
-                ref={previewInputRef}
-                value={previewInput}
-                onChange={handlePreviewInputChange}
-                onFocus={() => setIsInputFocused(true)}
-                onBlur={() => setIsInputFocused(false)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handlePreviewSend();
-                  }
-                }}
-                rows={1}
-                placeholder="Ask a question..."
-                disabled={isPreviewChatting}
-                style={{
-                  height: "40px",
-                  overflowY: "hidden",
-                  borderColor: isInputFocused ? primaryColor : (isDarkPreview ? "#262626" : "#E5E7EB"),
-                  boxShadow: isInputFocused ? `0 0 0 1px ${primaryColor}40` : "none",
-                  outline: "none",
-                }}
-                className={`flex-1 text-xs px-3.5 py-2.5 rounded-xl border transition-all font-medium resize-none min-h-[40px] max-h-[120px] chat-input-scrollbar leading-relaxed ${
-                  isDarkPreview
-                    ? "bg-[#181818] text-white placeholder-gray-500"
-                    : "bg-gray-100 text-gray-900 placeholder-gray-400"
-                }`}
-              />
-              <button
-                type="submit"
-                disabled={!previewInput.trim() || isPreviewChatting}
-                style={{ backgroundColor: primaryColor }}
-                className="h-[40px] px-3.5 text-white rounded-xl disabled:opacity-40 transition-transform active:scale-95 cursor-pointer flex items-center justify-center shrink-0 shadow-sm"
-                title="Send"
-              >
-                <svg className="w-4 h-4 transform rotate-90" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
-                </svg>
-              </button>
-            </form>
+              messages={previewMessages}
+              isChatting={isPreviewChatting}
+              onSendMessage={handlePreviewSend}
+              onResetSession={handleResetSession}
+              showLiveBadge={true}
+              className="w-full h-full flex-1 min-h-0"
+            />
           </div>
         </div>
       </div>

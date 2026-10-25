@@ -180,7 +180,7 @@ RETRIEVED CONTEXT:
 """), *state["messages"][-5:]]
 
     print(f"  ↳ [Chatbot Node] Invoking {model_provider}/{model_name} (temp={temperature}, context_len={len(retrieved_context)} chars)...")
-    response = await base_model.ainvoke(messages)
+    response = await base_model.ainvoke(messages, config=config)
     content_len = len(str(response.content)) if response and hasattr(response, "content") else 0
     print(f"  ↳ [Chatbot Node] Grounded response drafted ({content_len} chars)")
     
@@ -218,7 +218,7 @@ Keep your response clear, well-structured, friendly, and direct.""")
     print(f"  ↳ [Generic Response Node] Generating conversational response from session history with {model_provider}/{model_name}...")
     llm_model = get_model_instance(model_provider, model_name, temperature, max_tokens)
     full_messages = [system_prompt] + state["messages"]
-    response = await llm_model.ainvoke(full_messages)
+    response = await llm_model.ainvoke(full_messages, config=config)
     print(f"  ↳ [Generic Response Node] Conversational response generated ({len(str(response.content))} chars)")
     
     return {
@@ -362,7 +362,7 @@ Output ONLY the clarification request."""
     llm = get_model_instance(provider, model_name, temperature, max_tokens)
     
     full_messages = [system_prompt]
-    response = await llm.ainvoke(full_messages)
+    response = await llm.ainvoke(full_messages, config=config)
     
     if not response.content or not isinstance(response.content, str) or not response.content.strip():
         response = AIMessage(content="Could you please provide more details or clarify your query?")

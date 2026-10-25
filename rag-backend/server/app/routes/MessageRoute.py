@@ -92,36 +92,24 @@ async def return_message(body: MessageRequest):
             error_messages = []
             query_context_pairs = []
             query_type = "genuine_query"
-            STREAMABLE_NODES = {"chatbot_node", "generic_response_node", "clarify_node", "unsatisfactory_handle_node"}
-            current_streaming_node = None
-            
-            try:
-                async for event in agent.astream_events(initial_state, config, version="v2"):
-                    if event["event"] == "on_chain_end":
-                        output = event["data"].get("output")
-                        if isinstance(output, dict) and "system_prompt" in output and "trajectory" in output:
-                            trajectory = output["trajectory"]
-                            if "error_messages" in output:
-                                error_messages = output["error_messages"]
-                            if "query_context_pairs" in output:
-                                query_context_pairs = output["query_context_pairs"]
-                            if "query_type" in output:
-                                query_type = output["query_type"]
-                            elif "route" in output and isinstance(output["route"], list) and len(output["route"]) > 0:
-                                if output["route"][0] == "generic_or_repetitive":
-                                    query_type = "generic_or_repetitive"
-                            
-                            # Deliver only the final validated/approved AI response
-                            if "messages" in output and output["messages"]:
-                                last_msg = output["messages"][-1]
-                                if hasattr(last_msg, "content") and last_msg.content:
-                                    full_response = str(last_msg.content)
-                                    # Stream the final response smoothly in natural chunks
-                                    chunk_size = 16
-                                    for i in range(0, len(full_response), chunk_size):
-                                        yield full_response[i:i + chunk_size]
-                                        await asyncio.sleep(0.01)
-                            
+            # Nodes that bypass the evaluator and transition straight to END
+            LIVE_STREAMABLE_NODES = {"generic_response_node", "clarify_node"}
+            STATIC_DIRECT_NODES = {"unsatisfactory_handle_node"}
+            current_active_node = None
+            streamed_live = False
+
+            is_completed = False
+
+            async def persist_data():
+                """Persists AI messages and execution traces safely, shielded from client disconnects."""
+                if not full_response and not trajectory:
+                    return
+
+                # Record whether generation finished normally or was truncated by premature disconnect
+                final_saved_response = full_response if is_completed else (
+                    f"{full_response}\n\n*[Response interrupted]*" if full_response else "[Response interrupted before generation]"
+                )
+
                 # Calculate metrics
                 total_tokens = 0
                 total_duration_ms = 0
@@ -129,8 +117,7 @@ async def return_message(body: MessageRequest):
                     total_duration_ms += step.get("duration_ms", 0)
                     if step.get("tokens") and isinstance(step["tokens"], dict):
                         total_tokens += step["tokens"].get("total_tokens", 0)
-                        
-                # 7. Store the final AI response & traces concurrently via asyncio.gather
+
                 def serialize_item(item):
                     if isinstance(item, dict):
                         return {k: serialize_item(v) for k, v in item.items()}
@@ -154,19 +141,19 @@ async def return_message(body: MessageRequest):
                             lambda: supabase.table("messages").insert({
                                 "session_id": body.session_id,
                                 "sender_type": "ai",
-                                "content": full_response,
+                                "content": final_saved_response,
                                 "workspace_id": body.workspace_id
                             }).execute()
                         ),
                         # 2. Append AI message to Redis chat history cache
-                        asyncio.to_thread(append_chat_message_to_cache, body.session_id, "ai", full_response),
+                        asyncio.to_thread(append_chat_message_to_cache, body.session_id, "ai", final_saved_response),
                         # 3. Insert agent trace to Supabase
                         asyncio.to_thread(
                             lambda: supabase.table("agent_traces").insert({
                                 "session_id": body.session_id,
                                 "workspace_id": body.workspace_id,
                                 "query": body.message,
-                                "final_response": full_response,
+                                "final_response": final_saved_response,
                                 "total_tokens": total_tokens,
                                 "total_duration_ms": total_duration_ms,
                                 "trajectory": clean_trajectory,
@@ -185,10 +172,96 @@ async def return_message(body: MessageRequest):
                     print("[MessageRoute] AI response persisted and cached concurrently.")
                 except Exception as db_e:
                     print("Error saving message or traces to database/cache:", db_e)
-            
+
+            try:
+                async for event in agent.astream_events(initial_state, config, version="v2"):
+                    ev_type = event.get("event")
+                    event_name = event.get("name")
+                    langgraph_node = event.get("metadata", {}).get("langgraph_node")
+
+                    # Track active node transitions
+                    if ev_type == "on_chain_start" and event_name in LIVE_STREAMABLE_NODES:
+                        current_active_node = event_name
+                    elif ev_type == "on_chain_end" and event_name == current_active_node:
+                        current_active_node = None
+
+                    # 1. Live stream LLM tokens from direct-to-END nodes (no evaluator needed)
+                    if ev_type == "on_chat_model_stream":
+                        target_node = langgraph_node or current_active_node
+                        if target_node in LIVE_STREAMABLE_NODES:
+                            chunk = event.get("data", {}).get("chunk")
+                            if chunk and hasattr(chunk, "content") and chunk.content:
+                                token = chunk.content
+                                if isinstance(token, str):
+                                    text = token
+                                elif isinstance(token, list):
+                                    text = "".join([part.get("text", "") if isinstance(part, dict) else str(part) for part in token])
+                                else:
+                                    text = str(token)
+                                if text:
+                                    streamed_live = True
+                                    full_response += text
+                                    yield text
+
+                    # 2. Live stream static direct-to-END nodes (e.g. unsatisfactory_handle_node)
+                    elif ev_type == "on_chain_end" and event_name in STATIC_DIRECT_NODES:
+                        output = event.get("data", {}).get("output")
+                        if isinstance(output, dict) and "messages" in output and output["messages"]:
+                            last_msg = output["messages"][-1]
+                            if hasattr(last_msg, "content") and last_msg.content:
+                                text = str(last_msg.content)
+                                streamed_live = True
+                                full_response = text
+                                chunk_size = 16
+                                for i in range(0, len(text), chunk_size):
+                                    yield text[i:i + chunk_size]
+                                    await asyncio.sleep(0.01)
+
+                    # 3. Handle overall graph completion and post-evaluator responses
+                    elif ev_type == "on_chain_end":
+                        output = event.get("data", {}).get("output")
+                        if isinstance(output, dict) and "system_prompt" in output and "trajectory" in output:
+                            trajectory = output["trajectory"]
+                            if "error_messages" in output:
+                                error_messages = output["error_messages"]
+                            if "query_context_pairs" in output:
+                                query_context_pairs = output["query_context_pairs"]
+                            if "query_type" in output:
+                                query_type = output["query_type"]
+                            elif "route" in output and isinstance(output["route"], list) and len(output["route"]) > 0:
+                                if output["route"][0] == "generic_or_repetitive":
+                                    query_type = "generic_or_repetitive"
+
+                            # Deliver only the final validated/approved AI response
+                            if "messages" in output and output["messages"]:
+                                last_msg = output["messages"][-1]
+                                if hasattr(last_msg, "content") and last_msg.content:
+                                    final_msg_str = str(last_msg.content)
+                                    if not streamed_live:
+                                        # Response required an evaluator (chatbot_node -> evaluator -> satisfactory); stream final validated answer now
+                                        full_response = final_msg_str
+                                        chunk_size = 16
+                                        for i in range(0, len(full_response), chunk_size):
+                                            yield full_response[i:i + chunk_size]
+                                            await asyncio.sleep(0.01)
+                                    else:
+                                        # If already streamed live, ensure full_response matches final message for DB/cache persistence
+                                        full_response = final_msg_str
+
+                is_completed = True
+
+            except asyncio.CancelledError:
+                print(f"[MessageRoute] Client disconnected early for message: '{body.message[:40]}...'")
+                raise
             except Exception as stream_e:
                 print("Error occurred while streaming message:", stream_e)
                 yield f"\n\nError: {str(stream_e)}"
+            finally:
+                # Shield persistence tasks from cancellation if client disconnected early
+                try:
+                    await asyncio.shield(persist_data())
+                except asyncio.CancelledError:
+                    pass
 
         return StreamingResponse(generate_response(), media_type="text/plain")
     except Exception as e:

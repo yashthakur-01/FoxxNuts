@@ -38,7 +38,7 @@ export default function WorkspaceDropdown({
         <button
           type="button"
           onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-black/40 text-white hover:bg-black/60 border border-white/20 text-xs font-semibold transition-all cursor-pointer shadow-xs"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--fn-elevated)] text-[var(--fn-text)] hover:bg-[var(--fn-surface)] border border-[var(--fn-border)] text-xs font-semibold transition-all cursor-pointer shadow-xs"
         >
           <svg
             className="w-3.5 h-3.5"
@@ -72,20 +72,20 @@ export default function WorkspaceDropdown({
           onClick={() => setIsOpen(!isOpen)}
           className={
             variant === "header"
-              ? "flex items-center gap-2 bg-black/35 hover:bg-black/55 text-white border border-white/25 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer shadow-xs backdrop-blur-xs select-none active:scale-[0.98]"
+              ? "flex items-center gap-1.5 sm:gap-2 bg-[var(--fn-elevated)] hover:bg-[var(--fn-surface)] text-[var(--fn-text)] border border-[var(--fn-border)] px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer shadow-xs select-none active:scale-[0.98]"
               : "flex items-center justify-between gap-2 bg-[var(--fn-elevated)] hover:bg-[var(--fn-surface)] border border-[var(--fn-border)] hover:border-[var(--fn-accent)] text-[var(--fn-text)] text-xs rounded-[var(--fn-radius)] px-3 py-2 transition-all duration-150 cursor-pointer shadow-xs font-medium active:scale-[0.99]"
           }
           title="Switch active workspace"
         >
-          <div className="w-4 h-4 rounded bg-white/20 text-white text-[10px] font-bold flex items-center justify-center shrink-0 border border-white/25">
+          <div className="w-4 h-4 rounded bg-[var(--fn-accent)] text-white text-[10px] font-bold flex items-center justify-center shrink-0">
             {(activeWorkspace.workspace_name || "W")[0].toUpperCase()}
           </div>
-          <span className="truncate max-w-[150px] sm:max-w-[200px]">
+          <span className="truncate max-w-[110px] sm:max-w-[200px]">
             {activeWorkspace.workspace_name || "Workspace"}
           </span>
           <svg
-            className={`w-3.5 h-3.5 opacity-80 shrink-0 transition-transform duration-200 ${
-              isOpen ? "rotate-180 text-white opacity-100" : ""
+            className={`w-3.5 h-3.5 text-[var(--fn-text-tertiary)] shrink-0 transition-transform duration-200 ${
+              isOpen ? "rotate-180 text-[var(--fn-accent)]" : ""
             }`}
             fill="none"
             viewBox="0 0 24 24"

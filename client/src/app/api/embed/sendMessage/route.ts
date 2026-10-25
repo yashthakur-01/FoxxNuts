@@ -188,7 +188,7 @@ export async function POST(request: NextRequest) {
                 : Promise.resolve(null),
         ]);
 
-        // 🎯 FAQ CACHE HIT! Return cached answer directly without calling LLM
+        // FAQ CACHE HIT: Return cached answer directly without calling LLM
         if (cachedFaqAnswer) {
             console.log(`[FAQ Cache HIT] Serving cached AI response for workspace: ${workspace_id}`);
             

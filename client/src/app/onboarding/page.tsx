@@ -924,7 +924,7 @@ export default function OnboardingPage() {
                       className="w-full accent-[var(--fn-accent)] cursor-pointer"
                     />
                     <p className="text-[11px] text-[var(--fn-text-tertiary)] leading-relaxed mt-1">
-                      💡 Tip: If relevant context is not retrieved even though present in documents, try lowering (relaxing) this threshold.
+                      Tip: If relevant context is not retrieved even though present in documents, try lowering (relaxing) this threshold.
                     </p>
                   </div>
                 </div>

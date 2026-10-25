@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ChatInterface, { ChatMessage, ChatInterfaceConfig } from '@/components/ChatInterface';
 import { useEmbedConfig, useEmbedHistory } from '@/hooks/useChat';
@@ -32,12 +32,25 @@ function EmbedChatWidget() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [domainError, setDomainError] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const handleStopChatting = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  };
 
   // Initialize Anonymous Visitor Session ID
   useEffect(() => {
     if (typeof window !== 'undefined') {
       document.documentElement.style.background = 'transparent';
       document.body.style.background = 'transparent';
+      document.documentElement.style.height = '100%';
+      document.body.style.height = '100%';
+      document.body.style.margin = '0';
+      document.body.style.padding = '0';
+      document.body.style.overflow = 'hidden';
 
       let savedId = localStorage.getItem(`fn_visitor_${workspaceId}`);
       if (!savedId) {
@@ -49,7 +62,7 @@ function EmbedChatWidget() {
   }, [workspaceId]);
 
   const { data: remoteConfig } = useEmbedConfig(workspaceId || null);
-  const { data: remoteHistory } = useEmbedHistory(workspaceId || null, visitorId || null);
+  const { data: remoteHistory, isLoading: isHistoryLoading } = useEmbedHistory(workspaceId || null, visitorId || null);
 
   // Sync widget configuration from TanStack Query cache
   useEffect(() => {
@@ -162,6 +175,9 @@ function EmbedChatWidget() {
     // 2. Append bot placeholder to state
     setMessages((prev) => [...prev, botMsg]);
 
+    let botResponseText = '';
+    abortControllerRef.current = new AbortController();
+
     try {
       const response = await fetch('/api/embed/sendMessage', {
         method: 'POST',
@@ -171,6 +187,7 @@ function EmbedChatWidget() {
           session_id: visitorId,
           message: textToSend,
         }),
+        signal: abortControllerRef.current.signal,
       });
 
       if (response.status === 403) {
@@ -186,7 +203,6 @@ function EmbedChatWidget() {
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
-      let botResponseText = '';
 
       if (reader) {
         while (true) {
@@ -214,18 +230,30 @@ function EmbedChatWidget() {
       }
     } catch (err: any) {
       console.error('Embed chat error:', err);
+      const isAborted = err?.name === 'AbortError';
+
       setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === botMsgId
-            ? {
-                ...msg,
-                content: 'Sorry, I am unable to connect right now. Please try again later.',
-              }
-            : msg
-        )
+        prev.map((msg) => {
+          if (msg.id !== botMsgId) return msg;
+          if (isAborted) {
+            return {
+              ...msg,
+              content: botResponseText.trim()
+                ? `${botResponseText}\n\n*[Response stopped by user]*`
+                : '*[Response stopped by user]*',
+            };
+          }
+          return {
+            ...msg,
+            content: botResponseText.trim()
+              ? `${botResponseText}\n\n*[Response interrupted]*`
+              : 'Sorry, I am unable to connect right now. Please try again later.',
+          };
+        })
       );
     } finally {
       setIsLoading(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -253,17 +281,22 @@ function EmbedChatWidget() {
 
   // Render State B: Expanded Real Chat Window (380px x 600px)
   return (
-    <div className="w-full h-full flex flex-col overflow-hidden">
+    <div className="w-full h-full h-[100dvh] flex flex-col overflow-hidden">
       {domainError && (
-        <div className="bg-red-500/10 border-b border-red-500/20 text-red-400 text-xs p-3 font-medium">
-          ⚠️ {domainError}
+        <div className="bg-red-500/10 border-b border-red-500/20 text-red-400 text-xs p-3 font-medium flex items-center gap-2 shrink-0">
+          <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.008v.008H12v-.008z" />
+          </svg>
+          <span>{domainError}</span>
         </div>
       )}
       <ChatInterface
         config={config}
         messages={messages}
         isChatting={isLoading}
+        isLoading={isHistoryLoading && messages.length <= 1}
         onSendMessage={handleSendMessage}
+        onStopChatting={handleStopChatting}
         onResetSession={handleResetSession}
         onClose={() => toggleWidget(false)}
         showCloseButton={true}

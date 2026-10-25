@@ -914,8 +914,10 @@ export default function AnimatedFoxMascot({ mood, className = "" }: AnimatedFoxM
 
         {/* Live Status Metric Bar */}
         <div className="flex items-center justify-between text-xs font-mono text-[var(--fn-text-tertiary)] pt-2 border-t border-[var(--fn-border)]">
-          <span className="flex items-center gap-2 truncate pr-2">
-            <span className="text-[#FF1E27]">⚡</span>
+          <span className="flex items-center gap-1.5 truncate pr-2">
+            <svg className="w-3.5 h-3.5 text-[#FF1E27] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+            </svg>
             <span className="truncate">Target: {mood === "paradox" ? "Zero Hallucination" : mood === "accuracy" ? "Self-Evaluation Loop" : "Global Telemetry"}</span>
           </span>
           <button
@@ -926,7 +928,7 @@ export default function AnimatedFoxMascot({ mood, className = "" }: AnimatedFoxM
           >
             <span className="text-emerald-400 font-bold">● Live</span>
             <span className="text-[10px] opacity-75">
-              {clickCount > 0 ? `🦊 ×${clickCount}` : "poke"}
+              {clickCount > 0 ? `×${clickCount}` : "poke"}
             </span>
           </button>
         </div>
