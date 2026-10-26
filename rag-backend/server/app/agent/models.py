@@ -16,15 +16,15 @@ def get_chat_model(
     if not provider or not model_name:
         raise ValueError("Both provider and model_name must be provided.")
     if provider == "gemini":
-        api_key = os.getenv("GEMINI_API_KEY")
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         if not api_key:
-            raise ValueError("GEMINI_API_KEY environment variable is not set.")
-        return ChatGoogleGenerativeAI(model=model_name, temperature=temperature, max_tokens=max_tokens)
+            raise ValueError("GEMINI_API_KEY (or GOOGLE_API_KEY) environment variable is not set.")
+        return ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=temperature, max_tokens=max_tokens)
     elif provider == "openai":
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is not set.")
-        return ChatOpenAI(model=model_name, temperature=temperature, max_tokens=max_tokens)
+        return ChatOpenAI(model=model_name, api_key=api_key, temperature=temperature, max_tokens=max_tokens)
     elif provider == "groq":
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
