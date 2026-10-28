@@ -1,9 +1,9 @@
-FROM node:22-alpine AS builder
+FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 
 # Install dependencies
 COPY package*.json ./
-RUN npm ci --silent
+RUN npm ci
 
 # Copy source code
 COPY . .
@@ -17,7 +17,7 @@ ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
 RUN npm run build
 
 # Production image
-FROM node:22-alpine AS runner
+FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
@@ -25,7 +25,8 @@ ENV NODE_ENV=production
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/package*.json ./
-RUN npm ci --only=production --silent
+RUN npm ci --omit=dev
 
 EXPOSE 3000
 CMD ["npm", "run", "start"]
+
