@@ -25,6 +25,7 @@ services:
     build:
       context: ./rag-backend/server
       dockerfile: Dockerfile
+    image: foxnutts_server:latest
     container_name: foxnutts_server
     ports:
       - "8000:8000"
@@ -33,12 +34,10 @@ services:
     restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────
-  # Celery Worker (same image as server, different command)
+  # Celery Worker (reuses same image as server)
   # ─────────────────────────────────────────────────────────────
   celery:
-    build:
-      context: ./rag-backend/server
-      dockerfile: Dockerfile
+    image: foxnutts_server:latest
     container_name: foxnutts_celery
     command: >
       celery -A app.celery_app.celery_app worker

@@ -3,7 +3,7 @@ WORKDIR /app
 
 # Install dependencies
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --no-audit
 
 # Copy source code
 COPY . .
@@ -25,7 +25,7 @@ ENV NODE_ENV=production
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --no-audit
 
 EXPOSE 3000
 CMD ["npm", "run", "start"]
